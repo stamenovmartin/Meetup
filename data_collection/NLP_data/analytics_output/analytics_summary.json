@@ -1,0 +1,79 @@
+{
+  "timestamp": "2025-08-18T09:58:25.774885",
+  "total_events": 1873,
+  "statistics": {
+    "top_venues": {
+      "Скопје": 1629,
+      "Cineplexx - Скопје": 29,
+      "Ракометно Игралиште Битола Битола": 15,
+      "Градски Парк - Скопје": 13,
+      "Дојран Дојран": 9,
+      "Public Room": 8,
+      "Дом На Култура Струга Летна Сцена Сиеста Струга": 8,
+      "Rebel Ohrid Охрид": 7,
+      "Egoist Open Air Ohrid": 7,
+      "Hangar Club Охрид": 6,
+      "Театар Ј Х К Џинот Велес Велес": 6,
+      "Кино Фросина Time Start": 6
+    },
+    "categories": {
+      "IT/Технологија": 756,
+      "Музика": 654,
+      "Останато": 249,
+      "Театар": 54,
+      "Спорт": 43,
+      "Филм": 41,
+      "Балет": 31,
+      "Уметност": 14,
+      "Деловно": 11,
+      "За деца": 7,
+      "Едукација": 5,
+      "Настан": 4,
+      "Храна": 2,
+      "Работилница": 2
+    },
+    "prices": {
+      "free_events": 1134,
+      "paid_events": 739,
+      "free_percentage": 60.5,
+      "average_price": 742.0
+    },
+    "sources": {
+      "it_events_final_20250810_161849": 756,
+      "mktickets_events": 714,
+      "filharmonija_events": 300,
+      "allevents_events_20250818_091700": 57,
+      "cineplexx_events_20250810_130145": 29,
+      "karti_events_final_20250810_192257": 17
+    },
+    "organizers": {
+      "MKTickets.mk": 712,
+      "IT.mk": 608,
+      "Филхармонија": 300,
+      "Cineplexx": 29,
+      "Karti.mk": 8,
+      "Македонски народен театар / Makedonski naroden teatar": 8,
+      "BlaBla Language Exchange - Macedonia": 6,
+      "Public Room": 6,
+      "20 години WordPress! ⋆ IT.mk": 4,
+      "Кире": 2
+    },
+    "dates": {
+      "with_dates": 548,
+      "without_dates": 1325,
+      "date_availability": 29.3
+    }
+  },
+  "key_insights": {
+    "most_popular_venue": "Скопје",
+    "most_common_category": "IT/Технологија",
+    "free_events_percentage": 60.5,
+    "main_data_source": "it_events_final_20250810_161849",
+    "data_quality": {
+      "has_venues": true,
+      "has_categories": true,
+      "has_prices": true,
+      "has_dates": 29.3
+    }
+  }
+}

@@ -235,7 +235,10 @@ class ITEventsScraper:
             'duration': '',
             'location_full': '',
             'image_url': '',
-            'contact_info': ''
+            'contact_info': '',
+            'ticket_price_text': '',
+            'ticket_free': True,
+            'ticket_price_numeric': None
         }
 
         if not event_url or event_url == self.base_url:
@@ -299,11 +302,152 @@ class ITEventsScraper:
                 except:
                     continue
 
+            # 4. Цена на билет - НОВО!
+            price_info = self.extract_ticket_price_info()
+            details.update(price_info)
+
         except Exception as e:
             self.logger.error(f"    ❌ Грешка при скрепирање детали: {e}")
 
         return details
 
+    def extract_ticket_price_info(self) -> Dict:
+        """Извлекува информации за цената на билетот"""
+        price_info = {
+            'ticket_price_text': '',
+            'ticket_free': True,
+            'ticket_price_numeric': None
+        }
+
+        try:
+            # Земи го целиот текст од страницата
+            page_text = self.driver.find_element(By.TAG_NAME, "body").text.lower()
+
+            # Провери за бесплатни настани
+            free_keywords = [
+                'бесплатно', 'free', 'без надомест', 'бесплатен влез',
+                'no cost', 'без плаќање', 'бесплатна регистрација'
+            ]
+
+            for keyword in free_keywords:
+                if keyword in page_text:
+                    price_info['ticket_price_text'] = 'Бесплатно'
+                    price_info['ticket_free'] = True
+                    self.logger.info(f"    💰 Цена: Бесплатно (најдено: '{keyword}')")
+                    return price_info
+
+            # Селектори за цени
+            price_selectors = [
+                ".price", ".ticket-price", ".cost", "[class*='price']",
+                ".entry-price", ".event-price", "[class*='cost']",
+                ".registration-fee", ".admission", "[class*='fee']"
+            ]
+
+            # Пробај да најдеш специфични елементи за цена
+            for selector in price_selectors:
+                try:
+                    price_elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    for element in price_elements:
+                        price_text = element.text.strip()
+                        if price_text and self.contains_price_info(price_text):
+                            extracted_price = self.parse_price_text(price_text)
+                            if extracted_price:
+                                price_info.update(extracted_price)
+                                self.logger.info(f"    💰 Цена: {price_info['ticket_price_text']}")
+                                return price_info
+                except:
+                    continue
+
+            # Пребарувај со regex низ целиот текст
+            price_patterns = [
+                r'(?:цена|price|cost|билет)[\s:]*(\d+(?:[,.]?\d+)?)\s*(?:ден|mkd|евра?|eur|€|\$)',
+                r'(\d+(?:[,.]?\d+)?)\s*(?:ден|mkd|евра?|eur|€|\$)(?:\s*(?:за билет|per ticket|цена))?',
+                r'(?:регистрација|registration)[\s:]*(\d+(?:[,.]?\d+)?)\s*(?:ден|mkd|евра?|eur|€|\$)',
+                r'(?:влез|entrance|admission)[\s:]*(\d+(?:[,.]?\d+)?)\s*(?:ден|mkd|евра?|eur|€|\$)'
+            ]
+
+            for pattern in price_patterns:
+                matches = re.findall(pattern, page_text, re.IGNORECASE)
+                if matches:
+                    # Земи ја првата цена што ја најде
+                    price_num = matches[0].replace(',', '.')
+                    try:
+                        price_numeric = float(price_num)
+                        # Определи валута врз основа на контекст
+                        currency = self.detect_currency_from_context(page_text, price_num)
+
+                        price_info['ticket_price_text'] = f"{price_num} {currency}"
+                        price_info['ticket_free'] = False
+                        price_info['ticket_price_numeric'] = price_numeric
+
+                        self.logger.info(f"    💰 Цена: {price_info['ticket_price_text']} (regex)")
+                        return price_info
+                    except ValueError:
+                        continue
+
+            # Ако не е најдено ништо, остани со default (бесплатно)
+            self.logger.info(f"    💰 Цена: Не е пронајдена информација (default: бесплатно)")
+
+        except Exception as e:
+            self.logger.error(f"    ❌ Грешка при извлекување цена: {e}")
+
+        return price_info
+
+    def contains_price_info(self, text: str) -> bool:
+        """Провери дали текстот содржи информации за цена"""
+        price_indicators = [
+            'ден', 'mkd', 'евра', 'eur', '€', '$', 'цена', 'price',
+            'cost', 'билет', 'ticket', 'регистрација', 'registration',
+            'влез', 'entrance', 'admission', 'fee'
+        ]
+
+        text_lower = text.lower()
+        has_number = re.search(r'\d+', text)
+        has_price_word = any(word in text_lower for word in price_indicators)
+
+        return has_number and has_price_word
+
+    def parse_price_text(self, price_text: str) -> Dict:
+        """Парсира текст со цена и врати структурирани податоци"""
+        try:
+            # Извлечи број од текстот
+            number_match = re.search(r'(\d+(?:[,.]?\d+)?)', price_text)
+            if not number_match:
+                return None
+
+            price_num = number_match.group(1).replace(',', '.')
+            price_numeric = float(price_num)
+
+            # Определи валута
+            currency = self.detect_currency_from_context(price_text, price_num)
+
+            return {
+                'ticket_price_text': f"{price_num} {currency}",
+                'ticket_free': False,
+                'ticket_price_numeric': price_numeric
+            }
+
+        except (ValueError, AttributeError):
+            return None
+
+    def detect_currency_from_context(self, text: str, price_num: str) -> str:
+        """Определи валута врз основа на контекст"""
+        text_lower = text.lower()
+
+        # Провери за специфични валути
+        if any(curr in text_lower for curr in ['eur', '€', 'евра', 'евро']):
+            return 'EUR'
+        elif any(curr in text_lower for curr in ['$', 'usd', 'dollar']):
+            return 'USD'
+        elif any(curr in text_lower for curr in ['ден', 'mkd', 'денар']):
+            return 'MKD'
+        else:
+            # Default врз основа на големина на цената
+            price_val = float(price_num.replace(',', '.'))
+            if price_val > 100:  # Веројатно денари
+                return 'MKD'
+            else:  # Веројатно евра
+                return 'EUR'
     def find_event_containers(self) -> List:
         """Најди ги сите контејнери што содржат настани"""
         container_selectors = [

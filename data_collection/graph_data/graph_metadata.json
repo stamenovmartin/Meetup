@@ -1,0 +1,45 @@
+{
+  "created_at": "2025-08-18T10:58:57.546002",
+  "total_events": 1873,
+  "graphs_created": [
+    "event_similarity",
+    "heterogeneous"
+  ],
+  "feature_dimensions": {
+    "tfidf": 50,
+    "categorical": 4,
+    "numerical": 5
+  },
+  "statistics": {
+    "event_similarity": {
+      "nodes": 1873,
+      "edges": 26342,
+      "density": 0.015025714037993803,
+      "avg_degree": 28.1281366791244
+    },
+    "heterogeneous": {
+      "event_nodes": 1873,
+      "organizer_nodes": 135,
+      "venue_nodes": 97,
+      "event_org_edges": 1873,
+      "event_venue_edges": 1873
+    }
+  },
+  "data_columns": [
+    "event_id",
+    "title",
+    "description",
+    "date_start",
+    "time_start",
+    "location",
+    "category",
+    "organizer",
+    "price_text",
+    "is_free",
+    "url",
+    "source",
+    "scraped_at",
+    "node_id",
+    "combined_text"
+  ]
+}
