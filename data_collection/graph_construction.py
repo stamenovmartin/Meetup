@@ -1,32 +1,15 @@
-#!/usr/bin/env python3
-"""
-🔗 FIXED Graph Construction System за Event Data
-==========================================
-
-Креира различни типови графови од cleaned event data за GNN анализа:
-- Event Similarity Graph (homogeneous)
-- Event-Organizer-Venue Graph (heterogeneous)
-- Temporal Graph
-- Location-based Graph
-
-Output: PyTorch Geometric ready graphs + visualizations
-"""
-
 import pandas as pd
 import numpy as np
 import networkx as nx
 import torch
-import torch.nn.functional as F
 from torch_geometric.data import Data, HeteroData
 from torch_geometric.utils import from_networkx, to_networkx
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 import matplotlib.pyplot as plt
-import seaborn as sns
 from pathlib import Path
 import json
-import re
 from datetime import datetime
 import warnings
 
@@ -36,8 +19,7 @@ warnings.filterwarnings('ignore')
 class GraphConstructor:
     """Креира графови од event податоци"""
 
-    def __init__(self, data_dir=None, output_dir="graph_data"):
-        # FIXED: Подобрена автоматска детекција на патишта
+    def __init__(self, data_dir=None, output_dir="../graph_construction/graph_data"):
         if data_dir is None:
             data_dir = self.find_cleaned_data_dir()
 
