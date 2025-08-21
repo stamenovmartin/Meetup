@@ -43,7 +43,7 @@ class GraphConstructor:
         possible_paths = [
             # Тековна папка
             Path("cleaned_data"),
-            Path("NLP_data/cleaned_data"),
+            Path("../data_collection/NLP_data/cleaned_data"),
 
             # data_collection папка
             Path("data_collection/cleaned_data"),
@@ -55,7 +55,7 @@ class GraphConstructor:
             Path("../data_collection/NLP_data/cleaned_data"),  # ✅ ДОДАДЕНО!
 
             # graph_construction папка
-            Path("../graph_construction/graph_data"),
+            Path("graph_data"),
             Path("graph_construction/graph_data"),
 
             # Root на проектот
