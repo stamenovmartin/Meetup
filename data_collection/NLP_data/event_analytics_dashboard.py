@@ -18,7 +18,6 @@ sns.set_palette("husl")
 
 
 class EventAnalyticsDashboard:
-    """Анализа на clean event податоци"""
 
     def __init__(self, data_dir="cleaned_data"):
         self.data_dir = Path(data_dir)
@@ -35,41 +34,40 @@ class EventAnalyticsDashboard:
             cleaned_files = list(self.data_dir.glob("*_cleaned.csv"))
 
         if not cleaned_files:
-            print("Нема cleaned CSV фајлови!")
+            print("No cleaned CSV files found!")
             return False
 
         latest_file = max(cleaned_files, key=lambda p: p.stat().st_mtime)
 
         try:
             self.df = pd.read_csv(latest_file, encoding='utf-8-sig')
-            print(f"Вчитани се {len(self.df):,} настани од {latest_file.name}")
-
-            print(f"Колони: {list(self.df.columns)}")
+            print(f"Loaded {len(self.df):,} events from {latest_file.name}")
+            print(f"Columns: {list(self.df.columns)}")
             return True
 
         except Exception as e:
-            print(f"Грешка :{e}")
+            print(f"Error loading data: {e}")
             return False
 
     def prepare_data(self):
-        """Подготви податоци за анализа"""
-
         required_cols = ['title', 'category', 'location', 'source']
         missing_cols = [col for col in required_cols if col not in self.df.columns]
 
-        if missing_cols: print(f" Недостасуваат колони: {missing_cols}")
+        if missing_cols:
+            print(f"Missing columns: {missing_cols}")
 
         self.df = self.df.dropna(subset=['title'])
         self.prepare_price_data()
         self.prepare_date_data()
 
-        print(f"Подготвени {len(self.df)} валидни настани")
+        print(f"Prepared {len(self.df)} valid events")
 
     def prepare_price_data(self):
         self.df['is_free_bool'] = False
         self.df['price_numeric'] = 0
 
-        if 'is_free' in self.df.columns: self.df['is_free_bool'] = self.df['is_free'].fillna(True)
+        if 'is_free' in self.df.columns:
+            self.df['is_free_bool'] = self.df['is_free'].fillna(True)
 
         if 'price_text' in self.df.columns:
             for idx, row in self.df.iterrows():
@@ -85,7 +83,6 @@ class EventAnalyticsDashboard:
                         self.df.at[idx, 'is_free_bool'] = False
 
     def prepare_date_data(self):
-        """Подготви податоци за датуми"""
         self.df['has_date'] = False
         self.df['month'] = None
 
@@ -101,10 +98,8 @@ class EventAnalyticsDashboard:
                 pass
 
     def analyze_venues(self):
-        """Анализа на места/venues"""
-
         if 'location' not in self.df.columns:
-            print("Нема податоци за локации")
+            print("No location data available")
             return
 
         venue_counts = self.df['location'].value_counts().head(12)
@@ -114,11 +109,10 @@ class EventAnalyticsDashboard:
         bars = plt.barh(range(len(venue_counts)), venue_counts.values, color=colors)
 
         plt.yticks(range(len(venue_counts)), venue_counts.index)
-        plt.xlabel('Број на настани', fontsize=12)
-        plt.title('Најпопуларни места за настани', fontsize=16, fontweight='bold', pad=20)
+        plt.xlabel('Number of Events', fontsize=12)
+        plt.title('Most Popular Venues', fontsize=16, fontweight='bold', pad=20)
         plt.gca().invert_yaxis()
 
-        # Додај бројки на bars
         for i, (bar, value) in enumerate(zip(bars, venue_counts.values)):
             plt.text(value + 0.5, i, str(value), va='center', fontweight='bold', fontsize=10)
 
@@ -129,9 +123,8 @@ class EventAnalyticsDashboard:
         self.stats['top_venues'] = venue_counts.to_dict()
 
     def analyze_categories(self):
-        """Анализа на категории"""
         if 'category' not in self.df.columns:
-            print("Нема податоци за категории")
+            print("No category data available")
             return
 
         category_counts = self.df['category'].value_counts()
@@ -139,22 +132,22 @@ class EventAnalyticsDashboard:
         plt.figure(figsize=(16, 10))
 
         color_map = {
-            'IT/Технологија': '#1f77b4',  # Сина
-            'Музика': '#ff7f0e',  # Оранжева
-            'Останато': '#2ca02c',  # Зелена
-            'Театар': '#d62728',  # Црвена
-            'Спорт': '#9467bd',  # Виолетова
-            'Филм': '#8c564b',  # Кафена
-            'Балет': '#e377c2',  # Розова
-            'Конференција': '#7f7f7f',  # Сива
-            'Деловно': '#bcbd22',  # Маслинеста
-            'Фестивал': '#17becf',  # Светло сина
-            'Едукација': '#ff9896',  # Светло црвена
-            'Семинар': '#c5b0d5',  # Светло виолетова
-            'Уметност': '#c49c94',  # Светло кафена
-            'Храна': '#f7b6d3',  # Светло розова
-            'За деца': '#c7c7c7',  # Светло сива
-            'Работилница': '#dbdb8d'  # Светло маслинеста
+            'IT/Технологија': '#1f77b4',
+            'Музика': '#ff7f0e',
+            'Останато': '#2ca02c',
+            'Театар': '#d62728',
+            'Спорт': '#9467bd',
+            'Филм': '#8c564b',
+            'Балет': '#e377c2',
+            'Конференција': '#7f7f7f',
+            'Деловно': '#bcbd22',
+            'Фестивал': '#17becf',
+            'Едукација': '#ff9896',
+            'Семинар': '#c5b0d5',
+            'Уметност': '#c49c94',
+            'Храна': '#f7b6d3',
+            'За деца': '#c7c7c7',
+            'Работилница': '#dbdb8d'
         }
 
         colors = []
@@ -174,7 +167,7 @@ class EventAnalyticsDashboard:
             textprops={'fontsize': 12, 'fontweight': 'bold'}
         )
 
-        plt.title('Распределба на категории настани', fontsize=18, fontweight='bold', pad=30)
+        plt.title('Event Category Distribution', fontsize=18, fontweight='bold', pad=30)
 
         for autotext in autotexts:
             autotext.set_color('black')
@@ -184,7 +177,7 @@ class EventAnalyticsDashboard:
         plt.legend(
             wedges,
             [f'{cat} ({count})' for cat, count in zip(category_counts.index, category_counts.values)],
-            title="Категории",
+            title="Categories",
             loc="center left",
             bbox_to_anchor=(1, 0, 0.5, 1),
             fontsize=12,
@@ -202,20 +195,18 @@ class EventAnalyticsDashboard:
         self.stats['categories'] = category_counts.to_dict()
 
     def analyze_prices(self):
-        """Анализа на цени"""
-
         free_count = self.df['is_free_bool'].sum()
         paid_count = len(self.df) - free_count
 
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
 
-        categories = ['Бесплатни', 'Платени']
+        categories = ['Free', 'Paid']
         counts = [free_count, paid_count]
         colors = ['#2ecc71', '#e74c3c']
 
         bars = axes[0, 0].bar(categories, counts, color=colors, alpha=0.8)
-        axes[0, 0].set_title('Бесплатни vs Платени настани', fontweight='bold', fontsize=14)
-        axes[0, 0].set_ylabel('Број на настани')
+        axes[0, 0].set_title('Free vs Paid Events', fontweight='bold', fontsize=14)
+        axes[0, 0].set_ylabel('Number of Events')
 
         for bar, count in zip(bars, counts):
             axes[0, 0].text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
@@ -223,7 +214,7 @@ class EventAnalyticsDashboard:
 
         axes[0, 1].pie([free_count, paid_count], labels=categories, colors=colors,
                        autopct='%1.1f%%', startangle=90)
-        axes[0, 1].set_title('Процентна распределба', fontweight='bold', fontsize=14)
+        axes[0, 1].set_title('Percentage Distribution', fontweight='bold', fontsize=14)
 
         paid_events = self.df[~self.df['is_free_bool'] & (self.df['price_numeric'] > 0)]
 
@@ -239,9 +230,9 @@ class EventAnalyticsDashboard:
 
             if category_prices:
                 bp = axes[1, 0].boxplot(category_prices, labels=categories, patch_artist=True)
-                axes[1, 0].set_title('Цени по категорија', fontweight='bold', fontsize=14)
-                axes[1, 0].set_xlabel('Категорија')
-                axes[1, 0].set_ylabel('Цена (MKD)')
+                axes[1, 0].set_title('Prices by Category', fontweight='bold', fontsize=14)
+                axes[1, 0].set_xlabel('Category')
+                axes[1, 0].set_ylabel('Price (MKD)')
                 axes[1, 0].tick_params(axis='x', rotation=45)
 
                 colors_box = sns.color_palette("husl", len(bp['boxes']))
@@ -256,13 +247,13 @@ class EventAnalyticsDashboard:
             width = 0.35
 
             bars1 = axes[1, 1].bar(x_pos - width / 2, source_free['sum'], width,
-                                   label='Бесплатни', color='#2ecc71', alpha=0.8)
+                                   label='Free', color='#2ecc71', alpha=0.8)
             bars2 = axes[1, 1].bar(x_pos + width / 2, source_free['paid'], width,
-                                   label='Платени', color='#e74c3c', alpha=0.8)
+                                   label='Paid', color='#e74c3c', alpha=0.8)
 
-            axes[1, 1].set_title('💰 Цени по извор', fontweight='bold', fontsize=14)
-            axes[1, 1].set_xlabel('Извор')
-            axes[1, 1].set_ylabel('Број на настани')
+            axes[1, 1].set_title('Pricing by Source', fontweight='bold', fontsize=14)
+            axes[1, 1].set_xlabel('Source')
+            axes[1, 1].set_ylabel('Number of Events')
             axes[1, 1].set_xticks(x_pos)
             axes[1, 1].set_xticklabels([s.replace('_', '\n') for s in source_free.index], rotation=45)
             axes[1, 1].legend()
@@ -281,10 +272,8 @@ class EventAnalyticsDashboard:
         }
 
     def analyze_sources(self):
-        """Анализа на извори на податоци"""
-
         if 'source' not in self.df.columns:
-            print("Нема податоци за извори")
+            print("No source data available")
             return
 
         source_counts = self.df['source'].value_counts()
@@ -295,8 +284,8 @@ class EventAnalyticsDashboard:
 
         clean_names = [name.replace('_', ' ').title() for name in source_counts.index]
         plt.yticks(range(len(source_counts)), clean_names)
-        plt.xlabel('Број на настани', fontsize=12)
-        plt.title('Извори на податоци', fontsize=16, fontweight='bold', pad=20)
+        plt.xlabel('Number of Events', fontsize=12)
+        plt.title('Data Sources', fontsize=16, fontweight='bold', pad=20)
         plt.gca().invert_yaxis()
 
         for i, (bar, value) in enumerate(zip(bars, source_counts.values)):
@@ -309,10 +298,8 @@ class EventAnalyticsDashboard:
         self.stats['sources'] = source_counts.to_dict()
 
     def analyze_organizers(self):
-        """Анализа на организатори"""
-
         if 'organizer' not in self.df.columns:
-            print("Нема податоци за организатори")
+            print("No organizer data available")
             return
 
         org_counts = self.df['organizer'].value_counts().head(10)
@@ -322,8 +309,8 @@ class EventAnalyticsDashboard:
         bars = plt.barh(range(len(org_counts)), org_counts.values, color=colors)
 
         plt.yticks(range(len(org_counts)), org_counts.index)
-        plt.xlabel('Број на настани', fontsize=12)
-        plt.title('Најактивни организатори', fontsize=16, fontweight='bold', pad=20)
+        plt.xlabel('Number of Events', fontsize=12)
+        plt.title('Most Active Organizers', fontsize=16, fontweight='bold', pad=20)
         plt.gca().invert_yaxis()
 
         for i, (bar, value) in enumerate(zip(bars, org_counts.values)):
@@ -336,10 +323,8 @@ class EventAnalyticsDashboard:
         self.stats['organizers'] = org_counts.to_dict()
 
     def analyze_dates(self):
-        """Анализа на датуми"""
-
         if 'date_start' not in self.df.columns:
-            print("Нема податоци за датуми")
+            print("No date data available")
             return
 
         total_events = len(self.df)
@@ -348,13 +333,13 @@ class EventAnalyticsDashboard:
 
         fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
-        categories = ['Со датум', 'Без датум']
+        categories = ['With Date', 'Without Date']
         counts = [with_dates, without_dates]
         colors = ['#3498db', '#95a5a6']
 
         bars = axes[0].bar(categories, counts, color=colors, alpha=0.8)
-        axes[0].set_title('Достапност на датуми', fontweight='bold', fontsize=14)
-        axes[0].set_ylabel('Број на настани')
+        axes[0].set_title('Date Availability', fontweight='bold', fontsize=14)
+        axes[0].set_ylabel('Number of Events')
 
         for bar, count in zip(bars, counts):
             percentage = count / total_events * 100
@@ -368,8 +353,8 @@ class EventAnalyticsDashboard:
 
             if len(valid_months) > 0:
                 month_counts = valid_months.value_counts().sort_index()
-                month_names = ['Јан', 'Фев', 'Мар', 'Апр', 'Мај', 'Јун',
-                               'Јул', 'Авг', 'Сеп', 'Окт', 'Ное', 'Дек']
+                month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
                 month_labels = []
                 for month_num in month_counts.index:
@@ -378,15 +363,15 @@ class EventAnalyticsDashboard:
                         if 0 <= month_idx < 12:
                             month_labels.append(month_names[month_idx])
                         else:
-                            month_labels.append(f"М{int(month_num)}")
+                            month_labels.append(f"M{int(month_num)}")
                     else:
                         month_labels.append("N/A")
 
                 bars_month = axes[1].bar(range(len(month_counts)), month_counts.values,
                                          color=sns.color_palette("viridis", len(month_counts)), alpha=0.8)
-                axes[1].set_title('Настани по месец', fontweight='bold', fontsize=14)
-                axes[1].set_xlabel('Месец')
-                axes[1].set_ylabel('Број на настани')
+                axes[1].set_title('Events by Month', fontweight='bold', fontsize=14)
+                axes[1].set_xlabel('Month')
+                axes[1].set_ylabel('Number of Events')
                 axes[1].set_xticks(range(len(month_counts)))
                 axes[1].set_xticklabels(month_labels, rotation=45)
 
@@ -394,15 +379,15 @@ class EventAnalyticsDashboard:
                     axes[1].text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
                                  str(value), ha='center', va='bottom', fontweight='bold', fontsize=10)
             else:
-                axes[1].text(0.5, 0.5, 'Нема валидни датуми\nза месечна анализа',
+                axes[1].text(0.5, 0.5, 'No valid dates\nfor monthly analysis',
                              ha='center', va='center', transform=axes[1].transAxes,
                              fontsize=14, bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgray"))
-                axes[1].set_title('Настани по месец', fontweight='bold', fontsize=14)
+                axes[1].set_title('Events by Month', fontweight='bold', fontsize=14)
         else:
-            axes[1].text(0.5, 0.5, 'Нема податоци\nза месечна анализа',
+            axes[1].text(0.5, 0.5, 'No data available\nfor monthly analysis',
                          ha='center', va='center', transform=axes[1].transAxes,
                          fontsize=14, bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgray"))
-            axes[1].set_title('Настани по месец', fontweight='bold', fontsize=14)
+            axes[1].set_title('Events by Month', fontweight='bold', fontsize=14)
 
         plt.tight_layout()
         plt.savefig(self.output_dir / 'date_analysis.png', dpi=300, bbox_inches='tight')
@@ -415,8 +400,6 @@ class EventAnalyticsDashboard:
         }
 
     def generate_summary(self):
-        """Генерирај резиме"""
-
         summary = {
             'timestamp': datetime.now().isoformat(),
             'total_events': len(self.df),
@@ -441,25 +424,23 @@ class EventAnalyticsDashboard:
         with open(self.output_dir / 'analytics_summary.json', 'w', encoding='utf-8') as f:
             json.dump(summary, f, indent=2, ensure_ascii=False)
 
-        print("РЕЗУЛТАТИ ОД АНАЛИЗАТА")
-        print(f"Вкупно настани: {len(self.df):,}")
-        print(f"Најпопуларно место: {summary['key_insights']['most_popular_venue']}")
-        print(f"Најчеста категорија: {summary['key_insights']['most_common_category']}")
-        print(f"Бесплатни настани: {summary['key_insights']['free_events_percentage']:.1f}%")
-        print(f"Главен извор: {summary['key_insights']['main_data_source']}")
-        print(f"Настани со датуми: {self.stats.get('dates', {}).get('date_availability', 0):.1f}%")
+        print("ANALYSIS RESULTS")
+        print(f"Total events: {len(self.df):,}")
+        print(f"Most popular venue: {summary['key_insights']['most_popular_venue']}")
+        print(f"Most common category: {summary['key_insights']['most_common_category']}")
+        print(f"Free events: {summary['key_insights']['free_events_percentage']:.1f}%")
+        print(f"Main source: {summary['key_insights']['main_data_source']}")
+        print(f"Events with dates: {self.stats.get('dates', {}).get('date_availability', 0):.1f}%")
 
         if self.stats.get('prices', {}).get('average_price', 0) > 0:
-            print(f"Просечна цена: {self.stats['prices']['average_price']:.0f} MKD")
+            print(f"Average price: {self.stats['prices']['average_price']:.0f} MKD")
 
-        print(f"\nСите графики зачувани во: {self.output_dir}")
-        print("Анализата завршена!")
+        print(f"\nAll charts saved to: {self.output_dir}")
+        print("Analysis completed!")
 
         return summary
 
     def run_full_analysis(self):
-        """Изврши целосна анализа"""
-
         if not self.load_data():
             return False
 
@@ -478,18 +459,17 @@ class EventAnalyticsDashboard:
 
 
 def main():
-    """Главна функција"""
     try:
         dashboard = EventAnalyticsDashboard()
         success = dashboard.run_full_analysis()
 
         if success:
-            print("\nDashboard создаден успешно!")
+            print("\nDashboard created successfully!")
         else:
-            print("\nПроблем при создавање на dashboard")
+            print("\nProblem creating dashboard")
 
     except Exception as e:
-        print(f"Грешка: {e}")
+        print(f"Error: {e}")
         import traceback
         traceback.print_exc()
 

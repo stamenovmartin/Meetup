@@ -1,18 +1,6 @@
 #!/usr/bin/env python3
-"""
-🧹 Практична Data Cleaning скрипта за Event Data
-================================================
-
-Специјално дизајнирана за:
-- AlleventsEvents + CineplexEvents интеграција
-- Schema унификација
-- Македонски/Англиски текст стандардизација
-- Missing values интелигентно пополнување
-- GNN-ready dataset подготовка
-"""
 
 import pandas as pd
-import numpy as np
 import re
 from pathlib import Path
 from datetime import datetime
@@ -22,14 +10,12 @@ warnings.filterwarnings('ignore')
 
 
 class EventDataCleaner:
-    """Практичен cleaner за event податоци"""
 
     def __init__(self, data_dir="../processed_data", output_dir="cleaned_data"):
         self.data_dir = Path(data_dir)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
 
-        # Статистики
         self.stats = {
             'original_rows': 0,
             'final_rows': 0,
@@ -39,13 +25,11 @@ class EventDataCleaner:
         }
 
     def load_all_csvs(self):
-        """Вчитај ги сите CSV фајлови"""
         dataframes = {}
 
         csv_files = list(self.data_dir.glob("*.csv"))
-        print(f"📁 Пронајдени {len(csv_files)} CSV фајлови")
+        print(f"Found {len(csv_files)} CSV files")
 
-        # Очекувани извори
         expected_sources = ['allevents', 'cineplexx', 'filharmonija', 'it_events', 'karti', 'mktickets']
         found_sources = []
 
@@ -55,7 +39,6 @@ class EventDataCleaner:
                 source_name = file_path.stem
                 dataframes[source_name] = df
 
-                # Детектирај извор
                 detected_source = 'unknown'
                 for expected in expected_sources:
                     if expected in source_name.lower():
@@ -63,31 +46,27 @@ class EventDataCleaner:
                         found_sources.append(expected)
                         break
 
-                print(f"   ✅ {file_path.name}: {len(df)} rows [{detected_source}]")
+                print(f"   {file_path.name}: {len(df)} rows [{detected_source}]")
                 self.stats['original_rows'] += len(df)
             except Exception as e:
-                print(f"   ❌ {file_path.name}: {e}")
+                print(f"   Error loading {file_path.name}: {e}")
 
-        # Рапортирај за недостасувачки извори
         missing_sources = set(expected_sources) - set(found_sources)
         if missing_sources:
-            print(f"   ⚠️ Недостасуваат: {', '.join(missing_sources)}")
+            print(f"   Missing sources: {', '.join(missing_sources)}")
 
         return dataframes
 
     def unify_schema(self, dataframes):
-        """Унифицирај schema меѓу различни извори"""
-        print("\n🔗 Унификување на schema...")
+        print("\nUnifying schema...")
 
         unified_dfs = []
 
         for source_name, df in dataframes.items():
-            print(f"   📊 Обработувам: {source_name}")
+            print(f"   Processing: {source_name}")
 
-            # Креирај стандардна schema
             unified_df = pd.DataFrame()
 
-            # Задолжителни колони
             unified_df['event_id'] = df.get('event_id', range(len(df)))
             unified_df['title'] = df.get('title', 'Без наслов')
             unified_df['description'] = self._extract_description(df)
@@ -103,21 +82,17 @@ class EventDataCleaner:
             unified_df['scraped_at'] = datetime.now().strftime('%Y-%m-%d')
 
             unified_dfs.append(unified_df)
-            print(f"      ✅ Унифициран во {len(unified_df.columns)} колони")
+            print(f"      Unified to {len(unified_df.columns)} columns")
 
-        # Спои ги сите
         combined_df = pd.concat(unified_dfs, ignore_index=True)
-        print(f"   🎯 Комбиниран dataset: {len(combined_df)} rows")
+        print(f"   Combined dataset: {len(combined_df)} rows")
 
         return combined_df
 
     def _extract_description(self, df):
-        """Извлечи опис од различни колони"""
-        # Пробај различни комбинации според изворот
         if 'description' in df.columns:
             return df['description'].fillna('')
         elif 'cast' in df.columns and 'genre' in df.columns:
-            # За филмови (Cineplexx) - комбинирај genre + cast + director
             descriptions = []
             for _, row in df.iterrows():
                 desc_parts = []
@@ -126,26 +101,22 @@ class EventDataCleaner:
                 if pd.notna(row.get('director', '')):
                     desc_parts.append(f"Режисер: {row['director']}")
                 if pd.notna(row.get('cast', '')):
-                    cast_clean = str(row['cast'])[:200]  # Лимитирај должина
+                    cast_clean = str(row['cast'])[:200]
                     desc_parts.append(f"Глумци: {cast_clean}")
                 descriptions.append('. '.join(desc_parts))
             return pd.Series(descriptions)
         elif 'categories' in df.columns:
-            # За настани со категории
             return df['categories'].astype(str).apply(
                 lambda x: f"Категорија: {x}" if x and x != 'nan' else ''
             )
         elif 'organizer' in df.columns:
-            # Ако има само организатор, користи го тој
             return df['organizer'].astype(str).apply(
                 lambda x: f"Организатор: {x}" if x and x != 'nan' else ''
             )
         else:
-            # Fallback - празен опис
             return pd.Series([''] * len(df))
 
     def _extract_date(self, df):
-        """Стандардизирај датуми"""
         date_col = df.get('date_start', '')
 
         def parse_date(date_str):
@@ -154,7 +125,6 @@ class EventDataCleaner:
 
             date_str = str(date_str).strip()
 
-            # Мапирања за месеци
             months_mk = {
                 'јануари': '01', 'февруари': '02', 'март': '03', 'април': '04',
                 'мај': '05', 'јуни': '06', 'јули': '07', 'август': '08',
@@ -167,7 +137,6 @@ class EventDataCleaner:
                 'september': '09', 'october': '10', 'november': '11', 'december': '12'
             }
 
-            # Pattern: "11 August" -> "2025-08-11"
             match = re.search(r'(\d+)\s+([a-zA-Zа-шА-Ш]+)', date_str)
             if match:
                 day, month_name = match.groups()
@@ -177,7 +146,6 @@ class EventDataCleaner:
                 if month_num:
                     return f"2025-{month_num}-{day.zfill(2)}"
 
-            # Pattern: "2025-08-11" (веќе стандардизиран)
             if re.match(r'\d{4}-\d{2}-\d{2}', date_str):
                 return date_str
 
@@ -186,7 +154,6 @@ class EventDataCleaner:
         return date_col.apply(parse_date)
 
     def _extract_time(self, df):
-        """Стандардизирај време"""
         time_col = df.get('time_start', df.get('duration', ''))
 
         def parse_time(time_str):
@@ -195,13 +162,11 @@ class EventDataCleaner:
 
             time_str = str(time_str).strip()
 
-            # Pattern: "19:00" или "7:00 pm"
             match = re.search(r'(\d{1,2}):(\d{2})', time_str)
             if match:
                 hour, minute = match.groups()
                 hour = int(hour)
 
-                # Провери за PM
                 if 'pm' in time_str.lower() and hour < 12:
                     hour += 12
                 elif 'am' in time_str.lower() and hour == 12:
@@ -210,7 +175,6 @@ class EventDataCleaner:
                 if 0 <= hour <= 23:
                     return f"{hour:02d}:{minute}"
 
-            # Pattern: "20 часот"
             match = re.search(r'(\d{1,2})\s*час', time_str)
             if match:
                 hour = int(match.group(1))
@@ -222,10 +186,8 @@ class EventDataCleaner:
         return time_col.apply(parse_time)
 
     def _extract_location(self, df):
-        """Стандардизирај локации"""
         location_col = df.get('location', '')
 
-        # Речник за нормализација на локации - проширено
         location_mapping = {
             'cineplexx - skopje': 'Cineplexx - Скопје',
             'cineplexx': 'Cineplexx - Скопје',
@@ -265,21 +227,18 @@ class EventDataCleaner:
 
         def clean_location(location):
             if pd.isna(location) or location == '':
-                return 'Скопје'  # Default
+                return 'Скопје'
 
             location = str(location).strip()
 
-            # Отстрани шум
             location = re.sub(r'[^\w\s\-АаБбВвГгДдЃѓЕеЖжЗзСсИиЈјКкЛлЉљМмНнЊњОоПпРрСсТтЌќУуФфХхЦцЧчЏџШш]', '', location)
             location = re.sub(r'\s+', ' ', location).strip()
 
-            # Нормализирај
             location_lower = location.lower()
             for key, normalized in location_mapping.items():
                 if key in location_lower:
                     return normalized
 
-            # Ако е кратко, додај "Скопје"
             if len(location) < 3:
                 return 'Скопје'
 
@@ -288,8 +247,6 @@ class EventDataCleaner:
         return location_col.apply(clean_location)
 
     def _extract_category(self, df):
-        """Стандардизирај категории"""
-        # Пробај различни колони
         category_col = df.get('categories', df.get('category', df.get('genre', '')))
 
         def normalize_category(cat):
@@ -298,11 +255,9 @@ class EventDataCleaner:
 
             cat_str = str(cat).lower()
 
-            # Отстрани листи формат ['Music'] -> Music
             if cat_str.startswith('[') and cat_str.endswith(']'):
                 cat_str = cat_str.strip('[]').strip("'\"")
 
-            # Категорија мапирања - проширено за сите извори
             category_mapping = {
                 'music': 'Музика',
                 'музика': 'Музика',
@@ -327,7 +282,7 @@ class EventDataCleaner:
                 'theater': 'Театар',
                 'театар': 'Театар',
                 'theatre': 'Театар',
-                'pretстava': 'Театар',
+                'pretстава': 'Театар',
                 'претстава': 'Театар',
 
                 'sport': 'Спорт',
@@ -388,12 +343,10 @@ class EventDataCleaner:
         return category_col.apply(normalize_category)
 
     def _extract_organizer(self, df, source_name):
-        """Извлечи организатор"""
         organizer_col = df.get('organizer', '')
 
         def get_organizer(org):
             if pd.isna(org) or org == '':
-                # Default по извор - проширено за сите 6 извори
                 source_defaults = {
                     'cineplexx': 'Cineplexx',
                     'allevents': 'AllEvents Contributors',
@@ -413,20 +366,17 @@ class EventDataCleaner:
         return organizer_col.apply(get_organizer)
 
     def _extract_price(self, df):
-        """Стандардизирај цени"""
         price_col = df.get('ticket_price_text', df.get('price_text', ''))
 
         def normalize_price(price):
             if pd.isna(price) or price == '':
-                return 'Бесплатно'  # Default: бесплатно наместо "се уточува"
+                return 'Бесплатно'
 
             price_str = str(price).strip()
 
-            # Стандардизирај
             if any(word in price_str.lower() for word in ['бесплатно', 'free', 'без']):
                 return 'Бесплатно'
 
-            # Нормализирај "250 ден." -> "250 MKD"
             price_str = re.sub(r'ден\.?', 'MKD', price_str)
             price_str = re.sub(r'денар[и]?', 'MKD', price_str)
             price_str = re.sub(r'евр[а]?', 'EUR', price_str)
@@ -436,61 +386,51 @@ class EventDataCleaner:
         return price_col.apply(normalize_price)
 
     def _extract_is_free(self, df):
-        """Определи дали е бесплатно"""
-        # Провери од повеќе колони
         free_col = df.get('ticket_free', df.get('is_free', True))
         price_col = df.get('ticket_price_text', df.get('price_text', ''))
 
         def determine_is_free(row_idx):
-            # Првин провери explicit free колона
             if not pd.isna(free_col.iloc[row_idx]):
                 return bool(free_col.iloc[row_idx])
 
-            # Провери од цена
             price = str(price_col.iloc[row_idx]).lower()
             if any(word in price for word in ['бесплатно', 'free', 'без']):
                 return True
             elif any(word in price for word in ['ден', 'mkd', 'eur', '€', 'денар']):
                 return False
 
-            return True  # Default бесплатно (според новата логика)
+            return True
 
         return [determine_is_free(i) for i in range(len(df))]
 
     def clean_data(self, df):
-        """Главна функција за чистење"""
-        print("\n🧹 Чистење на податоци...")
+        print("\nCleaning data...")
 
         original_count = len(df)
 
-        # 1. Отстрани дупликати
-        print("   🗑️ Отстранување дупликати...")
+        print("   Removing duplicates...")
         duplicates_mask = df.duplicated(subset=['title', 'date_start', 'location'], keep='first')
         duplicates_count = duplicates_mask.sum()
 
         if duplicates_count > 0:
             df = df[~duplicates_mask].reset_index(drop=True)
             self.stats['duplicates_removed'] = duplicates_count
-            print(f"      ❌ Отстранети {duplicates_count} дупликати")
+            print(f"      Removed {duplicates_count} duplicates")
 
-        # 2. Пополни празни вредности
-        print("   ✏️ Пополнување празни вредности...")
+        print("   Filling empty values...")
 
         fill_count = 0
 
-        # Пополни празни наслови
         empty_titles = df['title'].isna() | (df['title'] == '')
         if empty_titles.any():
             df.loc[empty_titles, 'title'] = 'Настан без наслов'
             fill_count += empty_titles.sum()
 
-        # Пополни празни датуми со "Не се знае сеуште"
         empty_dates = df['date_start'] == ''
         if empty_dates.any():
             df.loc[empty_dates, 'date_start'] = 'Не се знае сеуште'
             fill_count += empty_dates.sum()
 
-        # Пополни празни времиња со default вредности по категорија
         empty_times = df['time_start'] == ''
         if empty_times.any():
             def default_time(category):
@@ -515,15 +455,11 @@ class EventDataCleaner:
             fill_count += empty_times.sum()
 
         self.stats['values_filled'] = fill_count
-        print(f"      ✅ Пополнети {fill_count} празни вредности")
+        print(f"      Filled {fill_count} empty values")
 
-        # 3. Стандардизирај текст
-        print("   📝 Стандардизација на текст...")
+        print("   Standardizing text...")
 
-        # Стандардизирај наслови (Title Case)
         df['title'] = df['title'].str.strip().str.title()
-
-        # Лимитирај должина на опис
         df['description'] = df['description'].str[:500]
 
         self.stats['standardizations'] += len(df)
@@ -531,137 +467,115 @@ class EventDataCleaner:
         final_count = len(df)
         self.stats['final_rows'] = final_count
 
-        print(f"   📊 Финален dataset: {final_count} rows")
-        print(f"   📈 Задржани: {final_count / original_count * 100:.1f}% од оригиналните податоци")
+        print(f"   Final dataset: {final_count} rows")
+        print(f"   Retained: {final_count / original_count * 100:.1f}% of original data")
 
         return df
 
     def validate_data(self, df):
-        """Валидирај ги податоците"""
-        print("\n✅ Валидација на податоци...")
+        print("\nValidating data...")
 
         issues = []
 
-        # Провери задолжителни полиња
         required_fields = ['title', 'location', 'category']
         for field in required_fields:
             empty_count = (df[field].isna() | (df[field] == '')).sum()
             if empty_count > 0:
-                issues.append(f"{field}: {empty_count} празни вредности")
+                issues.append(f"{field}: {empty_count} empty values")
 
-        # Провери датуми
         invalid_dates = df['date_start'].apply(
             lambda x: x not in ['Не се знае сеуште', ''] and not re.match(r'\d{4}-\d{2}-\d{2}', str(x))
         ).sum()
         if invalid_dates > 0:
-            issues.append(f"date_start: {invalid_dates} невалидни датуми")
+            issues.append(f"date_start: {invalid_dates} invalid dates")
 
-        # Провери времиња
         invalid_times = df['time_start'].apply(
             lambda x: x != '' and not re.match(r'\d{2}:\d{2}', str(x))
         ).sum()
         if invalid_times > 0:
-            issues.append(f"time_start: {invalid_times} невалидни времиња")
+            issues.append(f"time_start: {invalid_times} invalid times")
 
         if issues:
-            print("   ⚠️ Пронајдени проблеми:")
+            print("   Issues found:")
             for issue in issues:
                 print(f"      - {issue}")
         else:
-            print("   ✅ Сите валидации поминати!")
+            print("   All validations passed!")
 
         return len(issues) == 0
 
     def generate_summary(self, df):
-        """Генерирај резиме"""
-        print("\n📊 РЕЗИМЕ ОД ЧИСТЕЊЕТО")
+        print("\nCLEANING SUMMARY")
         print("=" * 40)
-        print(f"Оригинални rows: {self.stats['original_rows']:,}")
-        print(f"Финални rows: {self.stats['final_rows']:,}")
-        print(f"Дупликати отстранети: {self.stats['duplicates_removed']:,}")
-        print(f"Вредности пополнети: {self.stats['values_filled']:,}")
-        print(f"Успешност: {self.stats['final_rows'] / self.stats['original_rows'] * 100:.1f}%")
+        print(f"Original rows: {self.stats['original_rows']:,}")
+        print(f"Final rows: {self.stats['final_rows']:,}")
+        print(f"Duplicates removed: {self.stats['duplicates_removed']:,}")
+        print(f"Values filled: {self.stats['values_filled']:,}")
+        print(f"Success rate: {self.stats['final_rows'] / self.stats['original_rows'] * 100:.1f}%")
 
-        print(f"\n📈 ДИСТРИБУЦИЈА ПО КАТЕГОРИИ:")
+        print(f"\nCATEGORY DISTRIBUTION:")
         category_counts = df['category'].value_counts()
         for category, count in category_counts.head(10).items():
             print(f"   {category}: {count}")
 
-        print(f"\n📍 ТОП ЛОКАЦИИ:")
+        print(f"\nTOP LOCATIONS:")
         location_counts = df['location'].value_counts()
         for location, count in location_counts.head(5).items():
             print(f"   {location}: {count}")
 
-        print(f"\n🏢 ТОП ОРГАНИЗАТОРИ:")
+        print(f"\nTOP ORGANIZERS:")
         organizer_counts = df['organizer'].value_counts()
         for organizer, count in organizer_counts.head(5).items():
             print(f"   {organizer}: {count}")
 
-        print(f"\n💰 ЦЕНИ:")
+        print(f"\nPRICING:")
         free_events = df['is_free'].sum()
         paid_events = len(df) - free_events
-        print(f"   Бесплатни настани: {free_events}")
-        print(f"   Платени настани: {paid_events}")
+        print(f"   Free events: {free_events}")
+        print(f"   Paid events: {paid_events}")
         if free_events > paid_events:
-            print(f"   📝 Забелешка: Настани без позната цена се третираат како бесплатни")
+            print(f"   Note: Events without known price are treated as free")
 
     def run_full_cleaning(self):
-        """Изврши целосно чистење"""
-        print("🚀 СТАРТУВАЊЕ НА DATA CLEANING ПРОЦЕС")
+        print("STARTING DATA CLEANING PROCESS")
         print("=" * 50)
 
-        # 1. Вчитај податоци
         dataframes = self.load_all_csvs()
         if not dataframes:
-            print("❌ Нема податоци за обработка!")
+            print("No data to process!")
             return None
 
-        # 2. Унифицирај schema
         unified_df = self.unify_schema(dataframes)
-
-        # 3. Исчисти податоци
         cleaned_df = self.clean_data(unified_df)
-
-        # 4. Валидирај
         is_valid = self.validate_data(cleaned_df)
 
-        # 5. Зачувај
         output_file = self.output_dir / f"events_cleaned_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         cleaned_df.to_csv(output_file, index=False, encoding='utf-8-sig')
-        print(f"\n💾 Зачуван во: {output_file}")
+        print(f"\nSaved to: {output_file}")
 
-        # 6. Резиме
         self.generate_summary(cleaned_df)
 
-        # 7. Создај GNN-ready верзија
         gnn_file = self.output_dir / "events_gnn_ready.csv"
-
-        # Додај уникатни ID-ja
         cleaned_df['node_id'] = range(len(cleaned_df))
         cleaned_df.to_csv(gnn_file, index=False, encoding='utf-8-sig')
-        print(f"📊 GNN-ready dataset: {gnn_file}")
+        print(f"GNN-ready dataset: {gnn_file}")
 
-        print(f"\n🎉 DATA CLEANING ЗАВРШЕН УСПЕШНО!")
-        print(f"📁 Провери ја папката 'cleaned_data' за резултати")
+        print(f"\nDATA CLEANING COMPLETED SUCCESSFULLY!")
+        print(f"Check 'cleaned_data' folder for results")
 
         return cleaned_df
 
 
 def main():
-    """Главна функција"""
     try:
         cleaner = EventDataCleaner()
         result = cleaner.run_full_cleaning()
 
         if result is not None:
-            print("\n✅ Процесот завршен успешно!")
-            print("📋 Наредни чекори:")
-            print("   1. Провери го cleaned dataset")
-            print("   2. Започни со graph construction")
-            print("   3. Развивај GNN модели")
+            print("\nProcess completed successfully!")
 
     except Exception as e:
-        print(f"❌ Грешка: {e}")
+        print(f"Error: {e}")
         import traceback
         traceback.print_exc()
 
