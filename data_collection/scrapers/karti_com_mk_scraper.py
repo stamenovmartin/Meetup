@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import time
 import re
 from datetime import datetime
@@ -6,15 +8,24 @@ import pandas as pd
 import selenium
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+import os
+import glob
+import hashlib
+import logging
 
+# За парсирање на HTML
 try:
     from bs4 import BeautifulSoup
+
     HAS_BS4 = True
 except ImportError:
     HAS_BS4 = False
     selenium.webdriver.common.by
     import By
-
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
@@ -25,6 +36,11 @@ import logging
 
 
 class KartiEventsScraper:
+    """
+    Скрепер за настани од karti.com.mk
+    со детално скрепирање на информации од секој настан
+    """
+
     def __init__(self, debug=True):
         self.base_url = "https://karti.com.mk"
         self.events_url = "https://karti.com.mk"
@@ -34,6 +50,7 @@ class KartiEventsScraper:
         self.raw_data_dir = "../raw_data"
         self.processed_data_dir = "../processed_data"
 
+        # Setup logging
         logging.basicConfig(
             level=logging.INFO if debug else logging.WARNING,
             format='%(asctime)s - %(levelname)s - %(message)s'
@@ -44,14 +61,16 @@ class KartiEventsScraper:
         os.makedirs(self.processed_data_dir, exist_ok=True)
 
     def clean_old_files(self):
+        """Отстрани стари фајлови"""
         old_raw_files = glob.glob(os.path.join(self.raw_data_dir, "karti_events_raw_*.csv"))
         old_processed_files = glob.glob(os.path.join(self.processed_data_dir, "karti_events_*.csv"))
 
         for file_path in old_raw_files + old_processed_files:
             os.remove(file_path)
-            self.logger.info(f"Removed file: {file_path}")
+            self.logger.info(f"Отстранет фајл: {file_path}")
 
     def setup_driver(self):
+        """Setup Chrome driver со подобрени опции"""
         chrome_options = Options()
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
@@ -72,27 +91,32 @@ class KartiEventsScraper:
             self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
             self.driver.set_page_load_timeout(30)
             self.wait = WebDriverWait(self.driver, 10)
-            self.logger.info("Chrome driver initialized successfully")
+            self.logger.info("✅ Chrome driver успешно поставен")
         except Exception as e:
-            self.logger.error(f"Error initializing driver: {e}")
+            self.logger.error(f"❌ Грешка при поставување на driver: {e}")
             raise
 
     def close_driver(self):
+        """Затвори го driver-ot"""
         if self.driver:
             self.driver.quit()
-            self.logger.info("Driver closed")
+            self.logger.info("🔒 Driver затворен")
 
     def generate_event_id(self, title: str, date: str = "") -> str:
+        """Генерира уникатен event_id"""
         clean_title = re.sub(r'[^\w\s]', '', title.lower())
         combined = f"{clean_title}_{date}".strip('_')
         return hashlib.md5(combined.encode()).hexdigest()
 
     def parse_date(self, date_text: str) -> str:
+        """Парсирај датум од различни формати"""
         if not date_text:
             return ""
 
+        # Почисти го текстот
         date_text = date_text.strip()
 
+        # Македонски месеци mapping
         mk_months = {
             'Јануари': '01', 'Февруари': '02', 'Март': '03', 'Април': '04',
             'Мај': '05', 'Јуни': '06', 'Јули': '07', 'Август': '08',
@@ -102,6 +126,7 @@ class KartiEventsScraper:
             'септември': '09', 'октомври': '10', 'ноември': '11', 'декември': '12'
         }
 
+        # Ако е во формат "22 Август 2025"
         for mk_month, num_month in mk_months.items():
             if mk_month in date_text:
                 parts = date_text.replace(mk_month, num_month).split()
@@ -114,6 +139,7 @@ class KartiEventsScraper:
         return date_text
 
     def parse_price(self, price_text: str) -> Dict:
+        """Парсирај цена информации"""
         result = {
             'price_text': price_text,
             'price_min': None,
@@ -122,14 +148,17 @@ class KartiEventsScraper:
             'is_free': False
         }
 
-        if not price_text: return result
+        if not price_text:
+            return result
 
         price_text = price_text.strip()
 
+        # Провери дали е бесплатно
         if any(word in price_text.lower() for word in ['бесплатно', 'free', 'бесплатен']):
             result['is_free'] = True
             return result
 
+        # Пронајди броеви во текстот
         numbers = re.findall(r'\d+', price_text)
         if numbers:
             if len(numbers) == 1:
@@ -139,6 +168,7 @@ class KartiEventsScraper:
                 result['price_min'] = int(numbers[0])
                 result['price_max'] = int(numbers[-1])
 
+        # Детектирај валута
         if 'EUR' in price_text.upper() or '€' in price_text:
             result['currency'] = 'EUR'
         elif 'USD' in price_text.upper() or '$' in price_text:
@@ -147,6 +177,7 @@ class KartiEventsScraper:
         return result
 
     def extract_event_from_card(self, event_card) -> Dict:
+        """Извлечи основни податоци од event card"""
         event_data = {
             'event_id': '',
             'url': '',
@@ -170,6 +201,7 @@ class KartiEventsScraper:
         }
 
         try:
+            # 1. URL - event_card самиот е линк
             href = event_card.get_attribute('href')
             if href:
                 if not href.startswith('http'):
@@ -177,39 +209,47 @@ class KartiEventsScraper:
                 event_data['url'] = href
                 event_data['ticket_url'] = href
 
+            # 2. Наслов
             title_element = event_card.find_element(By.CSS_SELECTOR, ".k-event-list-event-title")
             if title_element:
                 event_data['title'] = title_element.text.strip()
 
+            # 3. Датум
             date_element = event_card.find_element(By.CSS_SELECTOR, ".k-events-event-date")
             if date_element:
                 date_text = date_element.text.strip()
                 event_data['date_start'] = self.parse_date(date_text)
 
+                # Ако има range (нпр "22-23 Август 2025")
                 if '-' in date_text and not date_text.startswith('http'):
                     parts = date_text.split('-')
                     if len(parts) >= 2:
+                        # Се обидуваме да направиме end date
                         end_part = parts[1].strip()
                         event_data['date_end'] = self.parse_date(end_part)
 
+            # 4. Локација/Venue
             venue_element = event_card.find_element(By.CSS_SELECTOR, ".k-events-venue-details")
             if venue_element:
                 venue_text = venue_element.text.strip()
                 event_data['venue'] = venue_text
                 event_data['location'] = venue_text
 
+            # 5. Цена
             try:
                 price_element = event_card.find_element(By.CSS_SELECTOR, ".cost")
                 if price_element:
                     price_text = price_element.text.strip()
                     event_data['ticket_price_text'] = price_text
 
+                    # Парсирај ја цената
                     price_info = self.parse_price(price_text)
                     event_data.update(price_info)
                     event_data['ticket_free'] = price_info['is_free']
             except NoSuchElementException:
                 pass
 
+            # 6. Слика
             try:
                 img_element = event_card.find_element(By.CSS_SELECTOR, ".k-events-event-image img")
                 if img_element:
@@ -221,6 +261,7 @@ class KartiEventsScraper:
             except NoSuchElementException:
                 pass
 
+            # 7. Категорија од CSS класите на самиот card
             class_attr = event_card.get_attribute('class')
             if class_attr:
                 if 'concerts' in class_attr:
@@ -238,21 +279,24 @@ class KartiEventsScraper:
                 else:
                     event_data['category'] = 'Настан'
 
+            # 8. Генерирај event_id
             if event_data['title']:
                 event_data['event_id'] = self.generate_event_id(
                     event_data['title'],
                     event_data['date_start']
                 )
 
+                # Основен опис
                 event_data['description'] = f"{event_data['category']}: {event_data['title']}"
 
             return event_data
 
         except Exception as e:
-            self.logger.error(f"Error extracting from card: {e}")
+            self.logger.error(f"Грешка при извлекување од card: {e}")
             return event_data
 
     def parse_description_details(self, description: str) -> Dict:
+        """Парсирај дополнителни детали од описот"""
         details = {
             'parsed_price': '',
             'parsed_time': '',
@@ -266,6 +310,8 @@ class KartiEventsScraper:
         if not description:
             return details
 
+        # 1. Извлечи цени од описот
+        # Пример: "2990-3990 мкд", "70 eur / 4300 мкд", "300 мкд"
         price_patterns = [
             r'(\d+[-–]\d+)\s*(мкд|eur|usd|денари)',
             r'(\d+)\s*(eur|usd)\s*/\s*(\d+)\s*(мкд|денари)',
@@ -291,6 +337,8 @@ class KartiEventsScraper:
             details['parsed_price'] = ' | '.join(prices_found)
             details['additional_prices'] = prices_found
 
+        # 2. Извлечи време
+        # Пример: "20:00", "22:00", "09:00"
         time_patterns = [
             r'(\d{1,2}:\d{2})',
             r'во\s*(\d{1,2}:\d{2})',
@@ -304,26 +352,29 @@ class KartiEventsScraper:
                 details['parsed_time'] = match.group(1)
                 break
 
+        # 3. Извлечи venue/локација од описот
+        # Обично е по време, пред опис
         venue_patterns = [
-            r'(\d{1,2}:\d{2})\s+([^А-Ш]+?)(?=[А-Ш]|$)',
-            r'мкд\s+\d{1,2}:\d{2}\s+([^А-Ш\n]+)',
-            r'eur\s+\d{1,2}:\d{2}\s+([^А-Ш\n]+)'
+            r'(\d{1,2}:\d{2})\s+([^А-Ш]+?)(?=[А-Ш]|$)',  # После време до прв македонски збор
+            r'мкд\s+\d{1,2}:\d{2}\s+([^А-Ш\n]+)',  # После цена и време
+            r'eur\s+\d{1,2}:\d{2}\s+([^А-Ш\n]+)'  # После EUR цена и време
         ]
 
         for pattern in venue_patterns:
             match = re.search(pattern, description, re.IGNORECASE)
             if match:
                 venue = match.group(-1).strip()
-                if len(venue) > 5 and len(venue) < 100:
+                if len(venue) > 5 and len(venue) < 100:  # Разумна должина
                     details['parsed_venue'] = venue
                     break
 
+        # 4. Контакт информации
         contact_patterns = [
             r'тел\.?\s*:?\s*(\d{2,3}[-\s]*\d{3}[-\s]*\d{3,4})',
             r'телефон\s*:?\s*(\d{2,3}[-\s]*\d{3}[-\s]*\d{3,4})',
             r'контакт\s*:?\s*(\d{2,3}[-\s]*\d{3}[-\s]*\d{3,4})',
-            r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
-            r'(www\.[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
+            r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',  # email
+            r'(www\.[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',  # website
             r'(facebook\.com/[a-zA-Z0-9._-]+)',
             r'(instagram\.com/[a-zA-Z0-9._-]+)'
         ]
@@ -336,6 +387,7 @@ class KartiEventsScraper:
         if contacts:
             details['contact_info'] = ' | '.join(contacts)
 
+        # 5. Тип на настан од клучни зборови
         event_types = {
             'концерт': ['концерт', 'настап', 'музика', 'пејач', 'бенд'],
             'фестивал': ['фестивал', 'festival'],
@@ -356,6 +408,7 @@ class KartiEventsScraper:
         return details
 
     def scrape_event_details(self, event_url: str) -> Dict:
+        """Влегува во линкот на настанот и скрепира детални податоци"""
         details = {
             'description_full': '',
             'organizer': '',
@@ -372,12 +425,13 @@ class KartiEventsScraper:
             return details
 
         try:
-            self.logger.info(f"Processing: {event_url}")
+            self.logger.info(f"  📄 Влегувам во: {event_url}")
             self.driver.get(event_url)
             time.sleep(3)
 
+            # 1. Основен опис/содржина - земи ГИ СИТЕ можни извори
             description_selectors = [
-                "body",
+                "body",  # Цела страница ако е потребно
                 "main",
                 ".container",
                 ".content",
@@ -398,8 +452,10 @@ class KartiEventsScraper:
                     desc_element = self.driver.find_element(By.CSS_SELECTOR, selector)
                     if desc_element:
                         desc_text = desc_element.text.strip()
+                        # Отстрани вишок whitespace
                         desc_text = re.sub(r'\s+', ' ', desc_text)
 
+                        # Земи го најдолгиот опис
                         if len(desc_text) > len(best_description):
                             best_description = desc_text
 
@@ -408,20 +464,22 @@ class KartiEventsScraper:
 
             if best_description and len(best_description) > 20:
                 details['description_full'] = best_description
-                self.logger.info(f"Description found: {best_description[:100]}...")
+                self.logger.info(f"    📝 Опис: {best_description[:100]}...")
 
+                # Парсирај дополнителни детали од описот
                 parsed = self.parse_description_details(best_description)
                 details['parsed_details'] = parsed
 
                 if parsed['parsed_price']:
-                    self.logger.info(f"Parsed prices: {parsed['parsed_price']}")
+                    self.logger.info(f"    💰 Парсирани цени: {parsed['parsed_price']}")
                 if parsed['parsed_time']:
-                    self.logger.info(f"Parsed time: {parsed['parsed_time']}")
+                    self.logger.info(f"    🕐 Парсирано време: {parsed['parsed_time']}")
                 if parsed['parsed_venue']:
-                    self.logger.info(f"Parsed venue: {parsed['parsed_venue']}")
+                    self.logger.info(f"    📍 Парсиран venue: {parsed['parsed_venue']}")
                 if parsed['contact_info']:
-                    self.logger.info(f"Contact: {parsed['contact_info']}")
+                    self.logger.info(f"    📞 Контакт: {parsed['contact_info']}")
 
+            # 2. Пробај да најдеш специфични организатори/продавачи
             organizer_selectors = [
                 ".organizer",
                 ".event-organizer",
@@ -440,34 +498,40 @@ class KartiEventsScraper:
                     org_element = self.driver.find_element(By.CSS_SELECTOR, selector)
                     if org_element and org_element.text.strip():
                         org_text = org_element.text.strip()
-                        if len(org_text) < 100:
+                        if len(org_text) < 100:  # Не преголем текст
                             details['organizer'] = org_text
-                            self.logger.info(f"Organizer: {details['organizer']}")
+                            self.logger.info(f"    🏢 Организатор: {details['organizer']}")
                             break
                 except NoSuchElementException:
                     continue
 
+            # 3. Дополнителни детали - земи сè што е достапно
             try:
+                # Пробај да земеш сè од страницата
                 page_source = self.driver.page_source
                 if page_source and len(page_source) > 1000:
+                    # Отстрани HTML тагови и извлечи чист текст
                     if HAS_BS4:
                         try:
                             soup = BeautifulSoup(page_source, 'html.parser')
                             clean_text = soup.get_text()
+                            # Почисти го текстот
                             clean_text = re.sub(r'\s+', ' ', clean_text).strip()
 
                             if len(clean_text) > len(details.get('description_full', '')):
-                                details['additional_info'] = clean_text[:5000]
+                                details['additional_info'] = clean_text[:5000]  # Првите 5000 карактери
                         except Exception as e:
-                            self.logger.debug(f"BeautifulSoup error: {e}")
+                            self.logger.debug(f"BeautifulSoup грешка: {e}")
                     else:
+                        # Ако нема BeautifulSoup, користи regex
                         clean_text = re.sub(r'<[^>]+>', '', page_source)
                         clean_text = re.sub(r'\s+', ' ', clean_text).strip()
                         details['additional_info'] = clean_text[:3000]
 
             except Exception as e:
-                self.logger.debug(f"Cannot get additional info: {e}")
+                self.logger.debug(f"Не можам да земам дополнителни информации: {e}")
 
+            # 4. Специфични билет информации
             ticket_selectors = [
                 ".ticket-info",
                 ".ticket-details",
@@ -491,16 +555,17 @@ class KartiEventsScraper:
 
             if ticket_info:
                 details['ticket_info'] = ' | '.join(ticket_info)
-                self.logger.info(f"Ticket info: {details['ticket_info'][:100]}...")
+                self.logger.info(f"    🎫 Билет инфо: {details['ticket_info'][:100]}...")
 
         except Exception as e:
-            self.logger.error(f"Error scraping details: {e}")
+            self.logger.error(f"    ❌ Грешка при скрепирање детали: {e}")
 
         return details
 
     def find_event_cards(self) -> List:
+        """Најди ги сите event cards на страницата"""
         card_selectors = [
-            "a.k_event_link",
+            "a.k_event_link",  # Од дадениот HTML
             ".k_event_link",
             "[class*='event-card']",
             "[class*='event-item']",
@@ -512,20 +577,23 @@ class KartiEventsScraper:
             try:
                 cards = self.driver.find_elements(By.CSS_SELECTOR, selector)
                 if cards:
-                    self.logger.info(f"Using selector '{selector}' - found {len(cards)} cards")
+                    self.logger.info(f"✅ Користам селектор '{selector}' - најдени {len(cards)} cards")
                     return cards
             except Exception as e:
-                self.logger.debug(f"Selector '{selector}' failed: {e}")
+                self.logger.debug(f"Селектор '{selector}' не работи: {e}")
                 continue
 
-        self.logger.warning("Cannot find event cards")
+        self.logger.warning("⚠️ Не можам да најдам event cards!")
         return []
 
     def scroll_and_load_more(self):
+        """Скролај и пробај да вчиташ повеќе настани"""
         try:
+            # Скролај до дното
             self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(2)
 
+            # Пробај да најдеш "Load More" копче
             load_more_selectors = [
                 "#show_more_events",
                 ".load-more",
@@ -538,7 +606,7 @@ class KartiEventsScraper:
                 try:
                     button = self.driver.find_element(By.CSS_SELECTOR, selector)
                     if button.is_displayed() and button.is_enabled():
-                        self.logger.info(f"Clicking Load More button")
+                        self.logger.info(f"🔄 Кликам на Load More копче")
                         self.driver.execute_script("arguments[0].click();", button)
                         time.sleep(3)
                         return True
@@ -548,69 +616,81 @@ class KartiEventsScraper:
             return False
 
         except Exception as e:
-            self.logger.error(f"Error during scroll/load more: {e}")
+            self.logger.error(f"Грешка при scroll/load more: {e}")
             return False
 
     def scrape_events(self, max_load_attempts: int = 3) -> List[Dict]:
+        """Главна функција за скрепирање настани"""
+        self.logger.info("🚀 Започнувам скрепирање настани од karti.com.mk...")
 
         try:
             self.driver.get(self.events_url)
+            self.logger.info(f"📖 Вчитана страница: {self.events_url}")
             time.sleep(5)
 
             all_events = []
 
+            # Пробај да вчиташ повеќе настани
             for attempt in range(max_load_attempts):
+                self.logger.info(f"\n🔍 === Обид {attempt + 1}/{max_load_attempts} ===")
 
+                # Најди ги event cards
                 event_cards = self.find_event_cards()
 
                 if not event_cards:
+                    self.logger.warning("❌ Нема event cards")
                     break
 
-                self.logger.info(f"Found {len(event_cards)} event cards")
+                self.logger.info(f"📊 Најдени {len(event_cards)} event cards")
 
+                # Извлечи податоци од секој card
                 current_events = []
                 for i, card in enumerate(event_cards):
                     try:
-                        if self.debug and i < 3:
-                            self.logger.info(f"\nCard {i + 1}")
+                        if self.debug and i < 3:  # Debug првите 3
+                            self.logger.info(f"\n--- Card {i + 1} ---")
 
                         event_data = self.extract_event_from_card(card)
 
                         if event_data['title'] and event_data['event_id']:
                             current_events.append(event_data)
                             if self.debug and i < 3:
-                                self.logger.info(f"Title: {event_data['title']}")
-                                self.logger.info(f"Date: {event_data['date_start']}")
-                                self.logger.info(f"Venue: {event_data['venue']}")
-                                self.logger.info(f"Price: {event_data['ticket_price_text']}")
+                                self.logger.info(f"✅ {event_data['title']}")
+                                self.logger.info(f"   📅 {event_data['date_start']}")
+                                self.logger.info(f"   🏢 {event_data['venue']}")
+                                self.logger.info(f"   💰 {event_data['ticket_price_text']}")
                         else:
                             if self.debug and i < 3:
-                                self.logger.warning(f"Card {i + 1}: No valid data")
+                                self.logger.warning(f"❌ Card {i + 1}: Нема валидни податоци")
 
                     except Exception as e:
-                        self.logger.error(f"Error processing card {i + 1}: {e}")
+                        self.logger.error(f"⚠️ Грешка при обработка на card {i + 1}: {e}")
                         continue
 
-                self.logger.info(f"Attempt {attempt + 1}: Collected {len(current_events)} valid events")
+                self.logger.info(f"✅ Обид {attempt + 1}: Собрани {len(current_events)} валидни настани")
                 all_events.extend(current_events)
 
+                # Пробај да вчиташ повеќе
                 if attempt < max_load_attempts - 1:
                     if not self.scroll_and_load_more():
-                        self.logger.info("No more events to load")
+                        self.logger.info("🔚 Нема повеќе настани за вчитување")
                         break
 
+            # Отстрани дупликати
             unique_events = self.remove_duplicates(all_events)
-            self.logger.info(f"After removing duplicates: {len(unique_events)} unique events")
+            self.logger.info(f"🧹 После отстранување дупликати: {len(unique_events)} уникатни настани")
 
+            # Фаза 2: Детални податоци
             detailed_events = self.scrape_detailed_data(unique_events)
 
             return detailed_events
 
         except Exception as e:
-            self.logger.error(f"Critical error during scraping: {e}")
+            self.logger.error(f"❌ Критична грешка при скрепирање: {e}")
             return []
 
     def remove_duplicates(self, events: List[Dict]) -> List[Dict]:
+        """Отстрани дупликати врз база на event_id"""
         unique_events = []
         seen_ids = set()
 
@@ -620,24 +700,26 @@ class KartiEventsScraper:
                 unique_events.append(event)
                 seen_ids.add(event_id)
             elif self.debug:
-                self.logger.debug(f"Duplicate removed: {event.get('title', 'No title')}")
+                self.logger.debug(f"🗑️ Дупликат отстранет: {event.get('title', 'No title')}")
 
         return unique_events
 
     def scrape_detailed_data(self, events: List[Dict]) -> List[Dict]:
+        """Фаза 2: Собирај детални податоци од секој настан"""
         if not events:
             return []
 
-        self.logger.info(f"\nPhase 2: Detailed data for {len(events)} events")
+        self.logger.info(f"\n🎬 === ФАЗА 2: Детални податоци за {len(events)} настани ===")
 
         detailed_events = []
         for i, event in enumerate(events):
-            self.logger.info(f"\n{i + 1}/{len(events)} - {event['title']}")
+            self.logger.info(f"\n🎭 {i + 1}/{len(events)} - {event['title']}")
 
             if event.get('url'):
                 try:
                     details = self.scrape_event_details(event['url'])
 
+                    # Мерџирај ги деталите
                     if details['description_full']:
                         event['description'] = details['description_full']
                     if details['organizer']:
@@ -649,6 +731,7 @@ class KartiEventsScraper:
                     if details['additional_info']:
                         event['additional_info'] = details['additional_info']
 
+                    # Додај парсирани детали како посебни полиња
                     parsed = details.get('parsed_details', {})
                     if parsed:
                         if parsed.get('parsed_price'):
@@ -664,21 +747,23 @@ class KartiEventsScraper:
                         if parsed.get('additional_prices'):
                             event['all_prices'] = ', '.join(parsed['additional_prices'])
 
+                    # Додај сите останати детали
                     event.update({k: v for k, v in details.items() if v and k != 'parsed_details'})
 
                 except Exception as e:
-                    self.logger.error(f"Error during detailed scraping: {e}")
+                    self.logger.error(f"    ❌ Грешка при детално скрепирање: {e}")
             else:
-                self.logger.info("Skipping (no valid link)")
+                self.logger.info("    ⏭️ Прескокнувам (нема валиден линк)")
 
             detailed_events.append(event)
 
-        self.logger.info(f"\nPhase 2 complete: {len(detailed_events)} events with details")
+        self.logger.info(f"\n✅ ФАЗА 2 завршена: {len(detailed_events)} настани со детали")
         return detailed_events
 
     def save_to_csv(self, events: List[Dict], filename_suffix: str = "") -> str:
+        """Зачувај ги настаните во CSV"""
         if not events:
-            self.logger.warning("No events to save")
+            self.logger.warning("Нема настани за зачувување")
             return ""
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -692,20 +777,22 @@ class KartiEventsScraper:
         try:
             df = pd.DataFrame(events)
             df.to_csv(filepath, index=False, encoding='utf-8-sig')
-            self.logger.info(f"Saved {len(events)} events to: {filepath}")
+            self.logger.info(f"💾 Зачувани {len(events)} настани во: {filepath}")
             return filepath
         except Exception as e:
-            self.logger.error(f"Error saving: {e}")
+            self.logger.error(f"❌ Грешка при зачувување: {e}")
             return ""
 
     def print_summary(self, events: List[Dict]):
+        """Прикажи резиме од скрепирањето"""
         if not events:
-            self.logger.info("No events to display")
+            self.logger.info("📊 Нема настани за приказ")
             return
 
-        self.logger.info(f"\nSUMMARY")
-        self.logger.info(f"Total events: {len(events)}")
+        self.logger.info(f"\n📊 === РЕЗИМЕ ===")
+        self.logger.info(f"Вкупно настани: {len(events)}")
 
+        # Статистики
         with_description = sum(1 for e in events if e.get('description') and len(e['description']) > 50)
         with_organizer = sum(1 for e in events if e.get('organizer'))
         with_price = sum(1 for e in events if e.get('ticket_price_text'))
@@ -715,108 +802,123 @@ class KartiEventsScraper:
         with_contact = sum(1 for e in events if e.get('contact_info') or e.get('parsed_contact'))
         free_events = sum(1 for e in events if e.get('ticket_free'))
 
-        self.logger.info(f"With description: {with_description}")
-        self.logger.info(f"With organizer: {with_organizer}")
-        self.logger.info(f"With price: {with_price}")
-        self.logger.info(f"With parsed prices: {with_parsed_price}")
-        self.logger.info(f"With parsed time: {with_parsed_time}")
-        self.logger.info(f"With venue: {with_venue}")
-        self.logger.info(f"With contact: {with_contact}")
-        self.logger.info(f"Free events: {free_events}")
+        self.logger.info(f"Со опис: {with_description}")
+        self.logger.info(f"Со организатор: {with_organizer}")
+        self.logger.info(f"Со цена: {with_price}")
+        self.logger.info(f"Со парсирани цени: {with_parsed_price}")
+        self.logger.info(f"Со парсирано време: {with_parsed_time}")
+        self.logger.info(f"Со venue: {with_venue}")
+        self.logger.info(f"Со контакт: {with_contact}")
+        self.logger.info(f"Бесплатни: {free_events}")
 
+        # Категории
         categories = {}
         for event in events:
-            cat = event.get('category', 'Unknown')
+            cat = event.get('category', 'Непознато')
             categories[cat] = categories.get(cat, 0) + 1
 
-        self.logger.info(f"\nCategories:")
+        self.logger.info(f"\nКатегории:")
         for cat, count in categories.items():
             self.logger.info(f"  {cat}: {count}")
 
+        # Парсирани типови настани
         parsed_types = {}
         for event in events:
-            p_type = event.get('parsed_event_type', 'Unknown')
+            p_type = event.get('parsed_event_type', 'Непознато')
             parsed_types[p_type] = parsed_types.get(p_type, 0) + 1
 
-        if any(t != 'Unknown' for t in parsed_types.keys()):
-            self.logger.info(f"\nParsed types:")
+        if any(t != 'Непознато' for t in parsed_types.keys()):
+            self.logger.info(f"\nПарсирани типови:")
             for p_type, count in parsed_types.items():
-                if p_type != 'Unknown':
+                if p_type != 'Непознато':
                     self.logger.info(f"  {p_type}: {count}")
 
-        self.logger.info(f"\nFirst 3 events:")
+        # Примери
+        self.logger.info(f"\n📋 Првите 3 настани:")
         for i, event in enumerate(events[:3]):
-            self.logger.info(f"{i + 1}. {event.get('title', 'No title')}")
-            self.logger.info(f"   Date: {event.get('date_start', 'No date')}")
-            self.logger.info(f"   Venue: {event.get('venue', 'No venue')}")
-            self.logger.info(f"   Original price: {event.get('ticket_price_text', 'No price')}")
+            self.logger.info(f"{i + 1}. {event.get('title', 'Без наслов')}")
+            self.logger.info(f"   📅 Датум: {event.get('date_start', 'Без датум')}")
+            self.logger.info(f"   🏢 Venue: {event.get('venue', 'Без venue')}")
+            self.logger.info(f"   💰 Оригинална цена: {event.get('ticket_price_text', 'Без цена')}")
             if event.get('parsed_price'):
-                self.logger.info(f"   Parsed prices: {event.get('parsed_price')}")
+                self.logger.info(f"   💰 Парсирани цени: {event.get('parsed_price')}")
             if event.get('parsed_time'):
-                self.logger.info(f"   Time: {event.get('parsed_time')}")
+                self.logger.info(f"   🕐 Време: {event.get('parsed_time')}")
             if event.get('parsed_event_type'):
-                self.logger.info(f"   Type: {event.get('parsed_event_type')}")
-            self.logger.info(f"   URL: {event.get('url', 'No URL')}")
+                self.logger.info(f"   🎭 Тип: {event.get('parsed_event_type')}")
+            self.logger.info(f"   🔗 URL: {event.get('url', 'Без URL')}")
 
     def run_full_scrape(self, max_load_attempts: int = 3, save_results: bool = True) -> List[Dict]:
+        """Изврши целосно скрепирање"""
         try:
-            self.logger.info("Starting scraping process")
+            self.logger.info("🚀 === ЗАПОЧНУВАМ СКРЕПИРАЊЕ ===")
 
+            # Setup
             self.setup_driver()
 
+            # Скрепирај
             events = self.scrape_events(max_load_attempts)
 
+            # Зачувај ако е потребно
             if save_results and events:
                 self.save_to_csv(events, "final")
 
+            # Прикажи резиме
             self.print_summary(events)
 
-            self.logger.info("Scraping completed")
+            self.logger.info("✅ === СКРЕПИРАЊЕТО ЗАВРШЕНО ===")
             return events
 
         except Exception as e:
-            self.logger.error(f"Critical error: {e}")
+            self.logger.error(f"❌ Критична грешка: {e}")
             return []
         finally:
             self.close_driver()
 
 
 def main():
-    print("Karti.com.mk Events Scraper")
+    """Главна функција"""
+    print("🎯 Karti.com.mk Events Scraper")
     print("=" * 50)
 
+    # Креирај скрепер со debug
     scraper = KartiEventsScraper(debug=True)
 
     try:
+        # Избриши стари фајлови
         scraper.clean_old_files()
 
+        # Скрепирај настани
         events = scraper.run_full_scrape(max_load_attempts=3, save_results=True)
 
         if events:
-            print(f"\nSuccessfully scraped {len(events)} events")
+            print(f"\n🎉 Успешно скрепирани {len(events)} настани!")
 
-            print("\nExamples:")
+            # Прикажи неколку примери
+            print("\n📋 Примери:")
             for i, event in enumerate(events[:5]):
-                print(f"{i + 1}. {event.get('title', 'No title')}")
-                print(f"   Date: {event.get('date_start', 'No date')}")
-                print(f"   Venue: {event.get('venue', 'Unknown')}")
-                print(f"   Price: {event.get('ticket_price_text', 'No price')}")
-                print(f"   Category: {event.get('category', 'No category')}")
-                print(f"   URL: {event.get('url', 'No URL')}")
-                print(f"   Description: {event.get('description', 'No description')[:100]}...")
+                print(f"{i + 1}. {event.get('title', 'Без наслов')}")
+                print(f"   📅 Датум: {event.get('date_start', 'Без датум')}")
+                print(f"   🏢 Venue: {event.get('venue', 'Непознат')}")
+                print(f"   💰 Цена: {event.get('ticket_price_text', 'Без цена')}")
+                print(f"   🎭 Категорија: {event.get('category', 'Без категорија')}")
+                print(f"   🔗 URL: {event.get('url', 'Без URL')}")
+                print(f"   📝 Опис: {event.get('description', 'Без опис')[:100]}...")
                 print()
         else:
-            print("No events scraped. Check configuration.")
+            print("❌ Не се скрепирани настани. Проверете ја конфигурацијата.")
 
     except KeyboardInterrupt:
-        print("\nScraping interrupted by user")
+        print("\n⏹️ Скрепирањето е прекинато од корисникот")
     except Exception as e:
-        print(f"\nUnexpected error: {e}")
+        print(f"\n❌ Неочекувана грешка: {e}")
     finally:
-        print("\nEnd of program")
+        print("\n👋 Крај на програмата")
 
 
+# Дополнителни utility функции
 def scrape_single_event(url: str) -> Dict:
+    """Скрепирај еден конкретен настан"""
     scraper = KartiEventsScraper(debug=True)
     try:
         scraper.setup_driver()
@@ -827,14 +929,16 @@ def scrape_single_event(url: str) -> Dict:
 
 
 def test_selectors():
+    """Тест функција за да се тестираат селекторите"""
     scraper = KartiEventsScraper(debug=True)
     try:
         scraper.setup_driver()
         scraper.driver.get("https://karti.com.mk")
         time.sleep(5)
 
-        print("Testing selectors...")
+        print("🔍 Тестирам селектори...")
 
+        # Тестирај различни селектори
         test_selectors = [
             "a.k_event_link",
             ".k_event_link",
@@ -847,21 +951,23 @@ def test_selectors():
         for selector in test_selectors:
             try:
                 elements = scraper.driver.find_elements(By.CSS_SELECTOR, selector)
-                print(f"'{selector}': {len(elements)} elements")
+                print(f"✅ '{selector}': {len(elements)} елементи")
                 if elements and len(elements) > 0:
-                    print(f"   Example: {elements[0].text[:50]}...")
+                    print(f"   Пример: {elements[0].text[:50]}...")
             except Exception as e:
-                print(f"'{selector}': Error - {e}")
+                print(f"❌ '{selector}': Грешка - {e}")
 
+        # Тестирај еден card детално
         cards = scraper.driver.find_elements(By.CSS_SELECTOR, "a.k_event_link")
         if cards:
-            print(f"\nDetailed analysis of first card:")
+            print(f"\n🔬 Детална анализа на првиот card:")
             card = cards[0]
             print(f"   Tag: {card.tag_name}")
             print(f"   Class: {card.get_attribute('class')}")
             print(f"   Href: {card.get_attribute('href')}")
             print(f"   HTML: {card.get_attribute('outerHTML')[:300]}...")
 
+            # Проверка на под-елементи
             sub_elements = [
                 ".k-event-list-event-title",
                 ".k-events-event-date",
@@ -874,9 +980,9 @@ def test_selectors():
             for sub_sel in sub_elements:
                 try:
                     sub_elem = card.find_element(By.CSS_SELECTOR, sub_sel)
-                    print(f"   {sub_sel}: '{sub_elem.text[:30]}'")
+                    print(f"   ✅ {sub_sel}: '{sub_elem.text[:30]}'")
                 except:
-                    print(f"   {sub_sel}: Not found")
+                    print(f"   ❌ {sub_sel}: Не најден")
 
     finally:
         scraper.close_driver()

@@ -9,9 +9,9 @@ Original file is located at
 #Extracting data from filharmonija.mk and MkTickets.com
 ---
 """
-"""
+
 !pip install -q requests beautifulsoup4 pandas dateparser tqdm
-"""
+
 import urllib.robotparser
 import requests
 from urllib.parse import urljoin
@@ -481,7 +481,7 @@ print(f"Saved scraped data to {csv_path}")
 """#Facebook scraper
 
 """
-"""
+
 !apt-get update
 !apt install -y chromium-chromedriver
 !pip install selenium
@@ -498,7 +498,7 @@ print(f"Saved scraped data to {csv_path}")
 
 # Install required packages
 !pip install requests beautifulsoup4 selenium webdriver-manager pandas lxml facebook-sdk
-"""
+
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd

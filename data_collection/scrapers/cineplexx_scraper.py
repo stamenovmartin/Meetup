@@ -58,11 +58,13 @@ class CineplexxScraper:
             self.driver.quit()
 
     def generate_event_id(self, title: str, date: str) -> str:
+        """Генерира уникатен event_id"""
         clean_title = re.sub(r'[^\w\s]', '', title.lower())
         combined = f"{clean_title}_{date}"
         return hashlib.md5(combined.encode()).hexdigest()
 
     def scrape_movie_details(self, movie_url: str) -> Dict:
+        """Влегува во линкот на филмот и скрепира детални податоци"""
         details = {
             'description_full': '',
             'genre': '',
@@ -76,71 +78,77 @@ class CineplexxScraper:
             return details
 
         try:
-            print(f"Processing: {movie_url}")
+            print(f" Го користам линкот : {movie_url}")
             self.driver.get(movie_url)
             time.sleep(3)
 
+            # 1. Жанр
             try:
                 genre_element = self.driver.find_element(By.CSS_SELECTOR, ".b-title-with-poster__genre")
                 if genre_element and genre_element.text.strip():
                     details['genre'] = genre_element.text.strip()
-                    print(f"Genre: {details['genre']}")
+                    print(f"Жанр: {details['genre']}")
             except:
-                print(f"Genre not found")
+                print(f"Жанр не најден")
 
+            # 2. Режисер
             try:
                 director_element = self.driver.find_element(By.XPATH,
                                                             "//strong[contains(text(), 'Режисери')]/following-sibling::span")
                 if director_element and director_element.text.strip():
                     details['director'] = director_element.text.strip()
-                    print(f"Director: {details['director']}")
+                    print(f"Режисер: {details['director']}")
             except:
-                print(f"Director not found")
+                print(f"Режисер не најден")
 
+            # 3. Актери
             try:
                 actors_element = self.driver.find_element(By.XPATH,
                                                           "//strong[contains(text(), 'Глумци')]/following-sibling::span")
                 if actors_element and actors_element.text.strip():
                     details['actors'] = actors_element.text.strip()
-                    print(f"Actors: {details['actors'][:50]}...")
+                    print(f"Актери: {details['actors'][:50]}...")
             except:
-                print(f"Actors not found")
+                print(f"Нема актери")
 
-            print(f"Processing duration...")
+            # 4. Времетраење
+            print(f"Времетраење...")
             try:
+                # Првин сите елементи со таа класа
                 all_duration_elements = self.driver.find_elements(By.CSS_SELECTOR, ".b-title-with-poster__duration")
-                print(f"Found {len(all_duration_elements)} duration elements")
+                print(f"Најдени се {len(all_duration_elements)} елементи со .b-title-with-poster__duration")
 
                 for i, elem in enumerate(all_duration_elements):
                     text = elem.text.strip()
                     html = elem.get_attribute('innerHTML')
-                    print(f"    Element {i + 1}: text='{text}', html='{html}'")
+                    print(f"    🔍 Елемент {i + 1}: text='{text}', html='{html}'")
 
                     if text:
                         details['duration'] = text
-                        print(f"    Duration from element {i + 1}: {details['duration']}")
+                        print(f"    ⏱️ Времетраење УСПЕШНО од елемент {i + 1}: {details['duration']}")
                         break
 
                 if not details['duration']:
-                    print(f"    No text in duration elements, waiting 5 more seconds...")
+                    print(f"    🔍 Нема текст во duration елементи, чекам 5 сек повеќе...")
                     time.sleep(5)
 
                     duration_element = self.driver.find_element(By.CSS_SELECTOR, ".b-title-with-poster__duration")
                     if duration_element:
                         text = duration_element.text.strip()
                         html = duration_element.get_attribute('innerHTML')
-                        print(f"    After waiting: text='{text}', html='{html}'")
+                        print(f"    🔍 После чекање: text='{text}', html='{html}'")
 
                         if text:
                             details['duration'] = text
-                            print(f"    Duration after waiting: {details['duration']}")
+                            print(f"    ⏱️ Времетраење е УСПЕШНО после чекање: {details['duration']}")
 
             except Exception as e:
-                print(f"Error in duration processing: {e}")
+                print(f"Грешка во duration debugging: {e}")
 
             if not details['duration']:
-                print(f"Duration could not be found")
+                print(f"Времетраењето не можам да го најдам!")
 
+            # 5. Година од датум
             try:
                 date_element = self.driver.find_element(By.XPATH,
                                                         "//strong[contains(text(), 'Датум на почеток')]/following-sibling::span")
@@ -149,26 +157,29 @@ class CineplexxScraper:
                     year_match = re.search(r'(\d{4})', date_text)
                     if year_match:
                         details['year'] = year_match.group(1)
-                        print(f"Year: {details['year']}")
+                        print(f"Година: {details['year']}")
             except:
-                print(f"Year not found")
+                print(f"Година не најдена")
 
+
+            # 7. Опис
             try:
                 description_elements = self.driver.find_elements(By.CSS_SELECTOR, ".b-movie-description__text")
                 for elem in description_elements:
                     if elem.text.strip() and len(elem.text.strip()) > 20:
-                        if not details['description_full']:
+                        if not details['description_full']:  # Земи го првиот опис
                             details['description_full'] = elem.text.strip()
                         else:
+                            # Додај го следниот опис
                             details['description_full'] += " " + elem.text.strip()
 
                 if details['description_full']:
-                    print(f"Description: {details['description_full'][:50]}...")
+                    print(f"Опис за филмот: {details['description_full'][:50]}...")
             except:
-                print(f"No description")
+                print(f"Нема опис")
 
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Грешка {e}")
 
         return details
 
@@ -176,13 +187,13 @@ class CineplexxScraper:
         self.driver.get(self.base_url)
         time.sleep(8)
 
-        print("Collecting basic data from three tabs")
+        print("Собирање на основни податоци од трите табови")
         all_basic_movies = []
 
         tabs_to_try = [
-            ("//span[contains(text(), 'Препорачано')]/..", "Recommended"),
-            ("//span[contains(text(), 'Во кино')]/..", "Now Playing"),
-            ("//span[contains(text(), 'Наскоро')]/..", "Coming Soon")
+            ("//span[contains(text(), 'Препорачано')]/..", "Препорачано"),
+            ("//span[contains(text(), 'Во кино')]/..", "Во кино"),
+            ("//span[contains(text(), 'Наскоро')]/..", "Наскоро")
         ]
 
         selectors_to_try = [
@@ -191,25 +202,25 @@ class CineplexxScraper:
             ".l-entity__item"
         ]
 
-        print("Collecting from initial display...")
+        print("Собирам од почетниот приказ...")
         movie_items = []
         for selector in selectors_to_try:
             movie_items = self.driver.find_elements(By.CSS_SELECTOR, selector)
             if movie_items:
-                print(f"   Using selector: {selector} - found {len(movie_items)} items")
+                print(f"   Користам селектор: {selector} - најдени {len(movie_items)} items")
                 break
 
         if movie_items:
-            initial_movies = self.extract_basic_movie_data(movie_items, "Initial display")
+            initial_movies = self.extract_basic_movie_data(movie_items, "Почетен приказ")
             all_basic_movies.extend(initial_movies)
 
         for tab_xpath, tab_name in tabs_to_try:
             try:
-                print(f"\nCollecting from tab: {tab_name}")
+                print(f"\nСобирам од таб: {tab_name}")
 
                 tab_elements = self.driver.find_elements(By.XPATH, tab_xpath)
                 if not tab_elements:
-                    print(f"Tab '{tab_name}' not found")
+                    print(f"Табот '{tab_name}' не е најден")
                     continue
 
                 self.driver.execute_script("arguments[0].click();", tab_elements[0])
@@ -219,21 +230,22 @@ class CineplexxScraper:
                 for selector in selectors_to_try:
                     movie_items = self.driver.find_elements(By.CSS_SELECTOR, selector)
                     if movie_items:
-                        print(f"   Using selector: {selector} - found {len(movie_items)} items")
+                        print(f"   Користам селектор: {selector} - најдени {len(movie_items)} items")
                         break
 
                 if movie_items:
                     tab_movies = self.extract_basic_movie_data(movie_items, tab_name)
                     all_basic_movies.extend(tab_movies)
                 else:
-                    print(f"No movies in tab '{tab_name}'")
+                    print(f"Нема филмови во табот '{tab_name}'")
 
             except Exception as e:
-                print(f"Error with tab '{tab_name}': {e}")
+                print(f"Грешка со таб '{tab_name}': {e}")
                 continue
 
-        print(f"\nCollected {len(all_basic_movies)} movies from all tabs")
+        print(f"\nСобрани {len(all_basic_movies)} филмови од сите табови")
 
+        # Отстрани дупликати пред детално скрепирање
         unique_basic_movies = []
         seen_movies = set()
         for movie in all_basic_movies:
@@ -242,13 +254,13 @@ class CineplexxScraper:
                 unique_basic_movies.append(movie)
                 seen_movies.add(movie_id)
 
-        print(f"After removing duplicates: {len(unique_basic_movies)} unique movies")
+        print(f"Отстранување на дупликати: {len(unique_basic_movies)} уникатни филмови")
 
-        print("\nCollecting detailed data...")
+        print("\nСобирам детални податоци...")
         detailed_movies = []
 
         for i, movie in enumerate(unique_basic_movies):
-            print(f"\n{i + 1}/{len(unique_basic_movies)} - {movie['title']}")
+            print(f"\n🎭 {i + 1}/{len(unique_basic_movies)} - {movie['title']}")
 
             if movie['url'] != self.base_url and '/film/' in movie['url']:
                 try:
@@ -267,17 +279,20 @@ class CineplexxScraper:
                     if movie_details['year']:
                         movie['year'] = movie_details['year']
 
+
                 except Exception as e:
-                    print(f"Error: {e}")
+                    print(f"Грешка {e}")
             else:
-                print(f"Skipping (no valid link)")
+                print(f"Прескокнувам (нема валиден линк)")
 
             detailed_movies.append(movie)
 
-        print(f"\nCompleted: {len(detailed_movies)} movies with details")
+        print(f"\nЗавршено: {len(detailed_movies)} филмови со детали")
+        print(f"Финално: {len(detailed_movies)} филмови")
         return detailed_movies
 
     def extract_basic_movie_data(self, movie_items, source_name: str) -> List[Dict]:
+        """Извлечи основни податоци од листа на movie items"""
         movies = []
 
         for i, item in enumerate(movie_items):
@@ -310,9 +325,11 @@ class CineplexxScraper:
                             movie_data['url'] = href if href.startswith('http') else self.base_url + href
                             movie_data['ticket_url'] = movie_data['url']
 
+                            # Извлечи датум од URL
                             date_match = re.search(r'date=(\d{4}-\d{2}-\d{2})', href)
                             if date_match:
                                 date_obj = datetime.strptime(date_match.group(1), '%Y-%m-%d')
+                                # Форматирај како "21 Март"
                                 months_mk = {
                                     1: 'Јануари', 2: 'Февруари', 3: 'Март', 4: 'Април',
                                     5: 'Мај', 6: 'Јуни', 7: 'Јули', 8: 'Август',
@@ -322,6 +339,7 @@ class CineplexxScraper:
                 except:
                     pass
 
+                # Извлечи наслов
                 try:
                     imgs = item.find_elements(By.CSS_SELECTOR, 'img')
                     if imgs:
@@ -331,6 +349,7 @@ class CineplexxScraper:
                 except:
                     pass
 
+                # Алтернативен наслов
                 if not movie_data['title']:
                     try:
                         captions = item.find_elements(By.CSS_SELECTOR, '.l-entity__figure-caption')
@@ -339,6 +358,7 @@ class CineplexxScraper:
                     except:
                         pass
 
+                # Извлечи датум од DOM ако не е земен од URL
                 if movie_data['date_start'] == self.target_date.strftime('%d %B'):
                     try:
                         date_elements = item.find_elements(By.CSS_SELECTOR, '.l-entity__figure-caption_startDate')
@@ -357,6 +377,7 @@ class CineplexxScraper:
                     except:
                         pass
 
+                # Додај ако има наслов
                 if movie_data['title']:
                     movie_data['event_id'] = self.generate_event_id(movie_data['title'], movie_data['date_start'])
                     movie_data['description'] = f"Кино проекција на {movie_data['title']}"
@@ -367,7 +388,7 @@ class CineplexxScraper:
             except Exception as e:
                 continue
 
-        print(f"   {source_name}: {len(movies)} movies")
+        print(f"   ✅ {source_name}: {len(movies)} филмови")
         return movies
 
     def save_data(self, movies: List[Dict]):
@@ -376,10 +397,12 @@ class CineplexxScraper:
 
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
+        # Raw data (оригинални колони за backup)
         df_raw = pd.DataFrame(movies)
         raw_path = f"{self.raw_data_dir}/cineplexx_raw_{timestamp}.csv"
         df_raw.to_csv(raw_path, index=False, encoding='utf-8')
 
+        # Processed data (според форматот на Филхармонијата + дополнителни полиња)
         processed_events = []
         for movie in movies:
             processed_event = {
@@ -395,6 +418,7 @@ class CineplexxScraper:
                 'description': movie.get('description', ''),
                 'categories': [movie.get('category', 'movie')],
                 'organizer': movie.get('organizer', ''),
+                # Додај дополнителни полиња
                 'genre': movie.get('genre', ''),
                 'director': movie.get('director', ''),
                 'actors': movie.get('actors', ''),
@@ -403,6 +427,7 @@ class CineplexxScraper:
             }
             processed_events.append(processed_event)
 
+        # Зачувај processed data
         df_processed = pd.DataFrame(processed_events)
         processed_path = f"{self.processed_data_dir}/cineplexx_events_{timestamp}.csv"
         df_processed.to_csv(processed_path, index=False, encoding='utf-8')
@@ -434,9 +459,9 @@ def main():
     results = scraper.run_scraping()
 
     if results['total_movies'] > 0:
-        print(f"Found {results['total_movies']} movies!")
+        print(f"Најдени {results['total_movies']} филмови!")
     else:
-        print("No results")
+        print("Нема резултати")
 
 
 if __name__ == "__main__":
