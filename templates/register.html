@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h4 class="mb-3">Регистрација</h4>
+        <form method="post">
+          <div class="mb-3">
+            <label class="form-label">Име</label>
+            <input class="form-control" type="text" name="name" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input class="form-control" type="email" name="email" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Град (опционално)</label>
+            <input class="form-control" type="text" name="city">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Лозинка</label>
+            <input class="form-control" type="password" name="password" required>
+          </div>
+          <button class="btn btn-success">Register</button>
+          <a class="btn btn-link" href="{{ url_for('ui_login_get') }}">Веќе имаш профил? Најави се</a>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

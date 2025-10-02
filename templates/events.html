@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<h4 class="mb-3">Настани (последни 100)</h4>
+{% if not user %}
+  <div class="alert alert-warning">Најави се за да можеш да оценуваш.</div>
+{% endif %}
+<div class="row g-3">
+  {% for e in events %}
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="card-title">{{ e.title }}</h5>
+        <div class="small text-muted mb-2">
+          {{ e.starts_at.strftime('%Y-%m-%d %H:%M') }} —
+          {% set v = Venue.query.get(e.venue_id) %}
+          {% if v %}{{ v.name }}{% else %}Unknown venue{% endif %}
+        </div>
+        {% if e.tags %}
+          <div class="mb-2">
+            {% for t in (e.tags or '').split(',') if t %}
+              <span class="badge text-bg-secondary">{{ t }}</span>
+            {% endfor %}
+          </div>
+        {% endif %}
+        {% if user %}
+        <form method="post" action="{{ url_for('ui_attend') }}" class="d-flex gap-2">
+          <input type="hidden" name="event_id" value="{{ e.id }}">
+          <button name="rating" value="1" class="btn {% if likes.get(e.id)==1 %}btn-success{% else %}btn-outline-success{% endif %}">Like</button>
+          <button name="rating" value="-1" class="btn {% if likes.get(e.id)==-1 %}btn-danger{% else %}btn-outline-danger{% endif %}">Dislike</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
