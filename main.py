@@ -1,5 +1,8 @@
 # main.py
 import os
+import logging
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from flask import render_template, redirect, url_for, session, flash
 from datetime import timedelta, datetime
 from flask import Flask, request, jsonify
@@ -13,16 +16,65 @@ from models.db_models import db, User, Friendship, Venue, Event, Attendance, Gro
 from models.recommender import recommend_for_user, get_recommender
 
 
+def setup_logging(app):
+    """Configure application logging"""
+    log_level = os.getenv("LOG_LEVEL", "INFO")
+    log_file = os.getenv("LOG_FILE", "logs/app.log")
+
+    # Create logs directory if it doesn't exist
+    log_dir = Path(log_file).parent
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # File handler with rotation
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=10 * 1024 * 1024,  # 10MB
+        backupCount=5
+    )
+    file_handler.setFormatter(logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    ))
+    file_handler.setLevel(getattr(logging, log_level))
+
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s'
+    ))
+    console_handler.setLevel(getattr(logging, log_level))
+
+    # Configure app logger
+    app.logger.addHandler(file_handler)
+    app.logger.addHandler(console_handler)
+    app.logger.setLevel(getattr(logging, log_level))
+
+    # Configure root logger for other modules
+    logging.basicConfig(level=getattr(logging, log_level), handlers=[file_handler, console_handler])
+
+    app.logger.info(f"Logging initialized at level {log_level}")
+
+
 # ---------- App Factory ----------
 
 def create_app():
     load_dotenv()
     app = Flask(__name__)
-    CORS(app)
+
+    # CORS configuration - allow frontend origins
+    cors_origins = os.getenv("CORS_ORIGINS", "*").split(",")
+    CORS(app, origins=cors_origins, supports_credentials=True)
+
+    # Initialize logging
+    setup_logging(app)
+
+    # Get absolute path for SQLite database
+    BASE_DIR = Path(__file__).resolve().parent
+    default_db_path = BASE_DIR / "instance" / "meetup.db"
+    default_db_uri = f"sqlite:///{default_db_path}"
 
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret")
     app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "dev-jwt")
-    app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///meetup.db")
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", default_db_uri)
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(days=7)
 
@@ -121,7 +173,7 @@ def create_app():
     def events_list():
         uid = session.get("uid")
         user = User.query.get(uid) if uid else None
-        q = Event.query.order_by(Event.starts_at.desc()).limit(100).all()
+        q = Event.query.order_by(Event.starts_at.desc()).all()  # ОТСТРАНЕТ limit(100) - сега дава СЕ!
         # map attendance for current user
         likes = {}
         if user:
@@ -190,12 +242,30 @@ def create_app():
     def friend_request():
         me = int(get_jwt_identity())
         data = request.get_json() or {}
-        to_id = int(data.get("user_id"))
-        if me == to_id: return jsonify({"error": "cannot friend yourself"}), 400
+
+        # Input validation
+        user_id_raw = data.get("user_id")
+        if user_id_raw is None:
+            return jsonify({"error": "user_id is required"}), 400
+
+        try:
+            to_id = int(user_id_raw)
+        except (ValueError, TypeError):
+            return jsonify({"error": "user_id must be a valid integer"}), 400
+
+        if me == to_id:
+            return jsonify({"error": "cannot friend yourself"}), 400
+
+        # Check if target user exists
+        target_user = User.query.get(to_id)
+        if not target_user:
+            return jsonify({"error": "user not found"}), 404
+
         if Friendship.query.filter_by(requester_id=me, addressee_id=to_id).first():
             return jsonify({"status": "already requested"})
+
         fr = Friendship(requester_id=me, addressee_id=to_id, status="pending")
-        db.session.add(fr);
+        db.session.add(fr)
         db.session.commit()
         return jsonify({"ok": True})
 
@@ -204,9 +274,21 @@ def create_app():
     def friend_accept():
         me = int(get_jwt_identity())
         data = request.get_json() or {}
-        from_id = int(data.get("user_id"))
+
+        # Input validation
+        user_id_raw = data.get("user_id")
+        if user_id_raw is None:
+            return jsonify({"error": "user_id is required"}), 400
+
+        try:
+            from_id = int(user_id_raw)
+        except (ValueError, TypeError):
+            return jsonify({"error": "user_id must be a valid integer"}), 400
+
         fr = Friendship.query.filter_by(requester_id=from_id, addressee_id=me, status="pending").first()
-        if not fr: return jsonify({"error": "no pending"}), 404
+        if not fr:
+            return jsonify({"error": "no pending friend request found"}), 404
+
         fr.status = "accepted"
         db.session.commit()
         return jsonify({"ok": True})
@@ -266,6 +348,52 @@ def create_app():
 
         return jsonify(result)
 
+    @app.get("/api/users/search")
+    @jwt_required()
+    def search_users():
+        me = int(get_jwt_identity())
+        query = request.args.get("q", "").strip()
+
+        users_query = User.query.filter(User.id != me)
+
+        if query:
+            users_query = users_query.filter(
+                db.or_(
+                    User.name.ilike(f"%{query}%"),
+                    User.email.ilike(f"%{query}%")
+                )
+            )
+
+        users = users_query.limit(20).all()
+
+        result = []
+        for user in users:
+            friendship = Friendship.query.filter(
+                db.or_(
+                    db.and_(Friendship.requester_id == me, Friendship.addressee_id == user.id),
+                    db.and_(Friendship.requester_id == user.id, Friendship.addressee_id == me)
+                )
+            ).first()
+
+            friendship_status = "none"
+            if friendship:
+                if friendship.status == "accepted":
+                    friendship_status = "friends"
+                elif friendship.requester_id == me:
+                    friendship_status = "requested"
+                else:
+                    friendship_status = "pending"
+
+            result.append({
+                "id": user.id,
+                "name": user.name,
+                "email": user.email,
+                "city": user.city,
+                "friendship_status": friendship_status
+            })
+
+        return jsonify(result)
+
     # ---------- Venues & Events ----------
 
     @app.post("/api/venues")
@@ -291,15 +419,42 @@ def create_app():
     def create_event():
         me = int(get_jwt_identity())
         data = request.get_json() or {}
+
+        # Validate required fields
+        if not data.get("title"):
+            return jsonify({"error": "title is required"}), 400
+
+        if not data.get("starts_at"):
+            return jsonify({"error": "starts_at is required"}), 400
+
+        if not data.get("venue_id"):
+            return jsonify({"error": "venue_id is required"}), 400
+
+        # Validate venue exists
+        try:
+            venue_id = int(data["venue_id"])
+        except (ValueError, TypeError):
+            return jsonify({"error": "venue_id must be a valid integer"}), 400
+
+        venue = Venue.query.get(venue_id)
+        if not venue:
+            return jsonify({"error": "venue not found"}), 404
+
+        # Validate date format
+        try:
+            starts_at = datetime.fromisoformat(data["starts_at"])
+        except ValueError:
+            return jsonify({"error": "starts_at must be a valid ISO date format"}), 400
+
         e = Event(
             title=data["title"],
             description=data.get("description"),
-            starts_at=datetime.fromisoformat(data["starts_at"]),
-            venue_id=int(data["venue_id"]),
+            starts_at=starts_at,
+            venue_id=venue_id,
             created_by=me,
             tags=",".join(data.get("tags", []))
         )
-        db.session.add(e);
+        db.session.add(e)
         db.session.commit()
         return jsonify({"id": e.id})
 
@@ -348,7 +503,8 @@ def create_app():
                 from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
                 verify_jwt_in_request(optional=True)
                 me = int(get_jwt_identity()) if get_jwt_identity() else None
-        except:
+        except Exception as e:
+            app.logger.debug(f"Optional JWT verification failed: {e}")
             pass
 
         # Ако има page/page_size → врати страници; ако не → врати СЕ
@@ -360,7 +516,7 @@ def create_app():
             total = len(items)
 
         # Debug logging
-        print(f"[DEBUG] /api/events: Returning {total} events (filters: start={start}, end={end}, city={city}, tags={tags})")
+        app.logger.debug(f"/api/events: Returning {total} events (filters: start={start}, end={end}, city={city}, tags={tags})")
 
         # Додај my_rating за секој event
         event_ratings = {}
@@ -411,7 +567,7 @@ def create_app():
         if me and event_scores:
             result_items.sort(key=lambda x: x.get("score_pct", 0), reverse=True)
             scores = [x.get("score_pct", 0) for x in result_items]
-            print(f"[DEBUG] Score distribution: min={min(scores)}%, max={max(scores)}%, count={len(scores)}")
+            app.logger.debug(f"Score distribution: min={min(scores)}%, max={max(scores)}%, count={len(scores)}")
 
         if page and page_size:
             return jsonify({
@@ -430,8 +586,31 @@ def create_app():
     def attend_and_rate():
         me = int(get_jwt_identity())
         data = request.get_json() or {}
-        event_id = int(data["event_id"])
-        rating = int(data.get("rating", 0))  # -1/0/+1
+
+        # Input validation
+        event_id_raw = data.get("event_id")
+        if event_id_raw is None:
+            return jsonify({"error": "event_id is required"}), 400
+
+        try:
+            event_id = int(event_id_raw)
+        except (ValueError, TypeError):
+            return jsonify({"error": "event_id must be a valid integer"}), 400
+
+        # Check if event exists
+        event = Event.query.get(event_id)
+        if not event:
+            return jsonify({"error": "event not found"}), 404
+
+        # Validate rating
+        try:
+            rating = int(data.get("rating", 0))
+        except (ValueError, TypeError):
+            return jsonify({"error": "rating must be an integer"}), 400
+
+        if rating not in [-1, 0, 1]:
+            return jsonify({"error": "rating must be -1, 0, or 1"}), 400
+
         rec = Attendance.query.filter_by(user_id=me, event_id=event_id).first()
         if not rec:
             rec = Attendance(user_id=me, event_id=event_id, rating=rating)
@@ -487,8 +666,8 @@ def create_app():
             return jsonify(recommendations)
         except Exception as e:
             # Fallback на традиционални препораки ако GNN не работи
-            print(f"GNN препораки не работат: {e}")
-            return jsonify([])
+            app.logger.error(f"GNN recommendations failed: {e}")
+            return jsonify({"error": "Recommendations temporarily unavailable"}), 500
 
     # Додај ги овие endpoints во main.py после постоечките
 
@@ -645,51 +824,6 @@ def create_app():
 
         return jsonify(feed)
 
-    @app.post("/api/user/search")
-    @jwt_required()
-    def search_users():
-        """Пребарај корисници за додавање пријатели"""
-        data = request.get_json() or {}
-        query = data.get("query", "").strip()
-
-        if len(query) < 2:
-            return jsonify([])
-
-        me = int(get_jwt_identity())
-
-        users = User.query.filter(
-            User.id != me,  # Не прикажувај самиот себе
-            db.or_(
-                User.name.ilike(f"%{query}%"),
-                User.email.ilike(f"%{query}%")
-            )
-        ).limit(20).all()
-
-        # Провери кои се веќе пријатели
-        existing_friendships = Friendship.query.filter(
-            db.or_(
-                db.and_(Friendship.requester_id == me, Friendship.addressee_id.in_([u.id for u in users])),
-                db.and_(Friendship.addressee_id == me, Friendship.requester_id.in_([u.id for u in users]))
-            )
-        ).all()
-
-        friendship_status = {}
-        for f in existing_friendships:
-            other_id = f.addressee_id if f.requester_id == me else f.requester_id
-            friendship_status[other_id] = f.status
-
-        result = []
-        for user in users:
-            result.append({
-                "id": user.id,
-                "name": user.name,
-                "email": user.email,
-                "city": user.city,
-                "friendship_status": friendship_status.get(user.id, "none")
-            })
-
-        return jsonify(result)
-
     # ---------- Enhanced Events API ----------
 
     @app.patch("/api/events/<int:event_id>/toggle-favorite")
@@ -828,42 +962,45 @@ def create_app():
 
         # ОТСТРАНЕНО: филтрирање по датум - сега земаме СЕ
         # Земи ги сите настани, не само идните
-        candidates = Event.query.limit(2000).all()
+        candidates = Event.query.all()  # ОТСТРАНЕТ limit(2000) - сега СЕ!
 
         if not candidates:
             return jsonify([])
 
-        # Користи GNN препорачувач за секој корисник
+        # Користи персонализиран GNN препорачувач за секој корисник
         recommender = get_recommender()
         group_scores = []
+        all_personalized_scores_for_events = {}
 
         for event in candidates:
             total_score = 0
+            total_personalized = 0
             for user_id in user_ids:
                 total_score += recommender.combined_score(user_id, event)
+                # ВАЖНО: користи персонализиран score наместо само GNN
+                pers_score = recommender.personalized_score(user_id, event)
+                total_personalized += pers_score
 
             avg_score = total_score / len(user_ids)
+            avg_personalized = total_personalized / len(user_ids)
             group_scores.append((avg_score, event))
+            all_personalized_scores_for_events[event.id] = avg_personalized
 
-        # Нормализирај во проценти
-        scores = [score for score, _ in group_scores]
-        min_score, max_score = min(scores), max(scores)
-
-        def normalize_to_percent(score):
-            if max_score == min_score:
-                return 75.0
-            return max(5.0, (score - min_score) / (max_score - min_score) * 90 + 10)
-
-        # Сортирај и форматирај
+        # Сортирај и форматирај - Директно конвертираме персонализирани scores во проценти
         result = []
         for score, event in sorted(group_scores, key=lambda x: x[0], reverse=True)[:20]:
+            # Персонализиран score е веќе 0-1, само *100 за процент
+            avg_personalized = all_personalized_scores_for_events[event.id]
+            personalized_pct = round(avg_personalized * 100.0, 1)
+
             result.append({
                 "event_id": event.id,
                 "title": event.title,
+                "description": event.description,
                 "starts_at": event.starts_at.isoformat(),
                 "venue_id": event.venue_id,
                 "tags": (event.tags or "").split(","),
-                "group_score_pct": round(normalize_to_percent(score), 1),
+                "gnn_score": personalized_pct,  # Персонализиран групен score
                 "raw_score": round(score, 3)
             })
 
@@ -913,7 +1050,9 @@ def create_app():
     return app
 
 
+# Create app instance for gunicorn (production)
+app = create_app()
+
 # ---------- Entrypoint ----------
 if __name__ == "__main__":
-    app = create_app()
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=True)

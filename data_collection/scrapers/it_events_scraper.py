@@ -8,6 +8,8 @@ import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
@@ -54,7 +56,7 @@ class ITEventsScraper:
     def setup_driver(self):
         """Setup Chrome driver со подобрени опции"""
         chrome_options = Options()
-        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
@@ -70,20 +72,21 @@ class ITEventsScraper:
         )
 
         try:
-            self.driver = webdriver.Chrome(options=chrome_options)
+            service = Service(ChromeDriverManager().install())
+            self.driver = webdriver.Chrome(service=service, options=chrome_options)
             self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
             self.driver.set_page_load_timeout(30)
             self.wait = WebDriverWait(self.driver, 10)
-            self.logger.info("✅ Chrome driver успешно поставен")
+            self.logger.info(" Chrome driver успешно поставен")
         except Exception as e:
-            self.logger.error(f"❌ Грешка при поставување на driver: {e}")
+            self.logger.error(f" Грешка при поставување на driver: {e}")
             raise
 
     def close_driver(self):
         """Затвори го driver-от"""
         if self.driver:
             self.driver.quit()
-            self.logger.info("🔒 Driver затворен")
+            self.logger.info(" Driver затворен")
 
     def generate_event_id(self, title: str, date: str = "") -> str:
         """Генерира уникатен event_id"""
@@ -97,11 +100,11 @@ class ITEventsScraper:
             return
 
         try:
-            self.logger.info("🔍 Анализирам структура на страницата...")
+            self.logger.info(" Анализирам структура на страницата...")
 
             # Сите articles
             all_articles = self.driver.find_elements(By.TAG_NAME, "article")
-            self.logger.info(f"📊 Вкупно <article> елементи: {len(all_articles)}")
+            self.logger.info(f" Вкупно <article> елементи: {len(all_articles)}")
 
             # Провери различни селектори
             selectors_to_test = [
@@ -116,7 +119,7 @@ class ITEventsScraper:
 
             for selector in selectors_to_test:
                 elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                self.logger.info(f"📋 '{selector}': {len(elements)} елементи")
+                self.logger.info(f" '{selector}': {len(elements)} елементи")
 
             # Детални податоци за првите 2 articles
             for i, article in enumerate(all_articles[:2]):
@@ -143,7 +146,7 @@ class ITEventsScraper:
                 self.logger.info(f"  HTML preview: {article.get_attribute('outerHTML')[:200]}...")
 
         except Exception as e:
-            self.logger.error(f"❌ Грешка при debug: {e}")
+            self.logger.error(f" Грешка при debug: {e}")
 
     def extract_title_robust(self, item) -> str:
         """Робусно извлекување на наслов"""
@@ -170,7 +173,7 @@ class ITEventsScraper:
                 title = strategy()
                 if title and len(title.strip()) > 3:
                     if self.debug:
-                        self.logger.debug(f"  ✅ Наслов најден со стратегија {i + 1}: '{title}'")
+                        self.logger.debug(f"   Наслов најден со стратегија {i + 1}: '{title}'")
                     return title.strip()
             except (NoSuchElementException, Exception):
                 continue
@@ -182,7 +185,7 @@ class ITEventsScraper:
                 # Земи ја првата линија како наслов
                 first_line = full_text.split('\n')[0].strip()
                 if len(first_line) > 3:
-                    self.logger.debug(f"  ⚠️ Користам прва линија како наслов: '{first_line}'")
+                    self.logger.debug(f"   Користам прва линија како наслов: '{first_line}'")
                     return first_line
         except:
             pass
@@ -245,7 +248,7 @@ class ITEventsScraper:
             return details
 
         try:
-            self.logger.info(f"  📄 Влегувам во: {event_url}")
+            self.logger.info(f"   Влегувам во: {event_url}")
             self.driver.get(event_url)
             time.sleep(3)
 
@@ -256,7 +259,7 @@ class ITEventsScraper:
                     org_element = self.driver.find_element(By.CSS_SELECTOR, selector)
                     if org_element and org_element.text.strip():
                         details['organizer'] = org_element.text.strip()
-                        self.logger.info(f"    🏢 Организатор: {details['organizer']}")
+                        self.logger.info(f"     Организатор: {details['organizer']}")
                         break
                 except:
                     continue
@@ -279,7 +282,7 @@ class ITEventsScraper:
                         desc_text = re.sub(r'\s+', ' ', desc_text)
                         if len(desc_text) > 50:  # Само ако има доволно содржина
                             details['description_full'] = desc_text
-                            self.logger.info(f"    📝 Опис: {desc_text[:100]}...")
+                            self.logger.info(f"     Опис: {desc_text[:100]}...")
                             break
                 except:
                     continue
@@ -297,7 +300,7 @@ class ITEventsScraper:
                     img_src = img_element.get_attribute('src')
                     if img_src and img_src.startswith('http'):
                         details['image_url'] = img_src
-                        self.logger.info(f"    🖼️ Слика: {img_src}")
+                        self.logger.info(f"     Слика: {img_src}")
                         break
                 except:
                     continue
@@ -307,7 +310,7 @@ class ITEventsScraper:
             details.update(price_info)
 
         except Exception as e:
-            self.logger.error(f"    ❌ Грешка при скрепирање детали: {e}")
+            self.logger.error(f"     Грешка при скрепирање детали: {e}")
 
         return details
 
@@ -333,7 +336,7 @@ class ITEventsScraper:
                 if keyword in page_text:
                     price_info['ticket_price_text'] = 'Бесплатно'
                     price_info['ticket_free'] = True
-                    self.logger.info(f"    💰 Цена: Бесплатно (најдено: '{keyword}')")
+                    self.logger.info(f"     Цена: Бесплатно (најдено: '{keyword}')")
                     return price_info
 
             # Селектори за цени
@@ -353,7 +356,7 @@ class ITEventsScraper:
                             extracted_price = self.parse_price_text(price_text)
                             if extracted_price:
                                 price_info.update(extracted_price)
-                                self.logger.info(f"    💰 Цена: {price_info['ticket_price_text']}")
+                                self.logger.info(f"     Цена: {price_info['ticket_price_text']}")
                                 return price_info
                 except:
                     continue
@@ -380,16 +383,16 @@ class ITEventsScraper:
                         price_info['ticket_free'] = False
                         price_info['ticket_price_numeric'] = price_numeric
 
-                        self.logger.info(f"    💰 Цена: {price_info['ticket_price_text']} (regex)")
+                        self.logger.info(f"     Цена: {price_info['ticket_price_text']} (regex)")
                         return price_info
                     except ValueError:
                         continue
 
             # Ако не е најдено ништо, остани со default (бесплатно)
-            self.logger.info(f"    💰 Цена: Не е пронајдена информација (default: бесплатно)")
+            self.logger.info(f"     Цена: Не е пронајдена информација (default: бесплатно)")
 
         except Exception as e:
-            self.logger.error(f"    ❌ Грешка при извлекување цена: {e}")
+            self.logger.error(f"     Грешка при извлекување цена: {e}")
 
         return price_info
 
@@ -477,7 +480,7 @@ class ITEventsScraper:
 
                     if valid_containers:
                         self.logger.info(
-                            f"✅ Користам селектор '{selector}' - најдени {len(valid_containers)} контејнери")
+                            f" Користам селектор '{selector}' - најдени {len(valid_containers)} контејнери")
                         return valid_containers
 
             except Exception as e:
@@ -485,7 +488,7 @@ class ITEventsScraper:
                 continue
 
         # Ако ништо не работи, пробај алтернативен пристап
-        self.logger.warning("⚠️ Користам алтернативен пристап - барам директно линкови")
+        self.logger.warning(" Користам алтернативен пристап - барам директно линкови")
         return self.find_events_by_links()
 
     def find_events_by_links(self) -> List:
@@ -512,18 +515,18 @@ class ITEventsScraper:
                 except:
                     continue
 
-            self.logger.info(f"🔗 Најдени {len(containers)} контејнери преку линкови")
+            self.logger.info(f" Најдени {len(containers)} контејнери преку линкови")
             return containers
 
         except Exception as e:
-            self.logger.error(f"❌ Грешка при алтернативен пристап: {e}")
+            self.logger.error(f" Грешка при алтернативен пристап: {e}")
             return []
 
     def extract_basic_event_data(self, event_items, source_name: str) -> List[Dict]:
         """Извлечи основни податоци од листа на event items"""
         events = []
 
-        self.logger.info(f"📊 {source_name}: Обработувам {len(event_items)} елементи...")
+        self.logger.info(f" {source_name}: Обработувам {len(event_items)} елементи...")
 
         for i, item in enumerate(event_items):
             try:
@@ -574,29 +577,29 @@ class ITEventsScraper:
                     event_data['description'] = f"IT настан: {event_data['title']}"
 
                     events.append(event_data)
-                    self.logger.info(f"   ✅ {len(events)}. {event_data['title']}")
+                    self.logger.info(f"    {len(events)}. {event_data['title']}")
 
                     if self.debug:
                         self.logger.info(f"      URL: {event_data['url']}")
                         self.logger.info(f"      Датум: {event_data['date_start']}")
                 else:
                     if self.debug:
-                        self.logger.warning(f"   ❌ Елемент {i + 1}: Нема валиден наслов")
+                        self.logger.warning(f"    Елемент {i + 1}: Нема валиден наслов")
 
             except Exception as e:
-                self.logger.error(f"   ⚠️ Грешка при обработка на елемент {i + 1}: {e}")
+                self.logger.error(f"    Грешка при обработка на елемент {i + 1}: {e}")
                 continue
 
-        self.logger.info(f"   ✅ {source_name}: Собрани {len(events)} валидни настани")
+        self.logger.info(f"    {source_name}: Собрани {len(events)} валидни настани")
         return events
 
     def scrape_events(self, max_pages: int = 50) -> List[Dict]:
         """Главна функција за скрепирање настани"""
-        self.logger.info("🚀 Започнувам скрепирање настани од it.mk/tag/it-nastan/...")
+        self.logger.info(" Започнувам скрепирање настани од it.mk/tag/it-nastan/...")
 
         try:
             self.driver.get(self.it_nastan_url)
-            self.logger.info(f"📖 Вчитана страница: {self.it_nastan_url}")
+            self.logger.info(f" Вчитана страница: {self.it_nastan_url}")
             time.sleep(5)
 
             # Debug структура ако е потребно
@@ -606,13 +609,13 @@ class ITEventsScraper:
             page_num = 1
 
             while page_num <= max_pages:
-                self.logger.info(f"\n🔍 === Страница {page_num}/{max_pages} ===")
+                self.logger.info(f"\n === Страница {page_num}/{max_pages} ===")
 
                 # Најди ги контejнерите за настани
                 event_items = self.find_event_containers()
 
                 if not event_items:
-                    self.logger.warning(f"❌ Нема настани на страница {page_num}")
+                    self.logger.warning(f" Нема настани на страница {page_num}")
                     break
 
                 # Извлечи податоци
@@ -641,23 +644,23 @@ class ITEventsScraper:
 
                     if next_link:
                         next_href = next_link.get_attribute('href')
-                        self.logger.info(f"   ➡️ Оди на следна страница: {next_href}")
+                        self.logger.info(f"    Оди на следна страница: {next_href}")
                         self.driver.get(next_href)
                         time.sleep(5)
                         page_num += 1
                     else:
-                        self.logger.info("   ❌ Нема следна страница")
+                        self.logger.info("    Нема следна страница")
                         break
 
                 except Exception as e:
-                    self.logger.error(f"   ❌ Грешка при навигација: {e}")
+                    self.logger.error(f"    Грешка при навигација: {e}")
                     break
 
-            self.logger.info(f"\n✅ ФАЗА 1 завршена: Собрани {len(all_events)} настани од {page_num} страници")
+            self.logger.info(f"\n ФАЗА 1 завршена: Собрани {len(all_events)} настани од {page_num} страници")
 
             # Отстрани дупликати
             unique_events = self.remove_duplicates(all_events)
-            self.logger.info(f"🧹 После отстранување дупликати: {len(unique_events)} уникатни настани")
+            self.logger.info(f" После отстранување дупликати: {len(unique_events)} уникатни настани")
 
             # Фаза 2: Детални податоци
             detailed_events = self.scrape_detailed_data(unique_events)
@@ -665,7 +668,7 @@ class ITEventsScraper:
             return detailed_events
 
         except Exception as e:
-            self.logger.error(f"❌ Критична грешка при скрепирање: {e}")
+            self.logger.error(f" Критична грешка при скрепирање: {e}")
             return []
 
     def remove_duplicates(self, events: List[Dict]) -> List[Dict]:
@@ -686,7 +689,7 @@ class ITEventsScraper:
                 unique_events.append(event)
                 seen_events.add(event_key)
             else:
-                self.logger.debug(f"🗑️ Дупликат отстранет: {event.get('title', 'No title')}")
+                self.logger.debug(f" Дупликат отстранет: {event.get('title', 'No title')}")
 
         return unique_events
 
@@ -695,11 +698,11 @@ class ITEventsScraper:
         if not events:
             return []
 
-        self.logger.info(f"\n🎬 === ФАЗА 2: Детални податоци за {len(events)} настани ===")
+        self.logger.info(f"\n === ФАЗА 2: Детални податоци за {len(events)} настани ===")
 
         detailed_events = []
         for i, event in enumerate(events):
-            self.logger.info(f"\n🎭 {i + 1}/{len(events)} - {event['title']}")
+            self.logger.info(f"\n {i + 1}/{len(events)} - {event['title']}")
 
             if event.get('url') and event['url'] != self.base_url:
                 try:
@@ -717,13 +720,13 @@ class ITEventsScraper:
                     event.update({k: v for k, v in details.items() if v})
 
                 except Exception as e:
-                    self.logger.error(f"    ❌ Грешка при детално скрепирање: {e}")
+                    self.logger.error(f"     Грешка при детално скрепирање: {e}")
             else:
-                self.logger.info("    ⏭️ Прескокнувам (нема валиден линк)")
+                self.logger.info("    ⏭ Прескокнувам (нема валиден линк)")
 
             detailed_events.append(event)
 
-        self.logger.info(f"\n✅ ФАЗА 2 завршена: {len(detailed_events)} настани со детали")
+        self.logger.info(f"\n ФАЗА 2 завршена: {len(detailed_events)} настани со детали")
         return detailed_events
 
     def save_to_csv(self, events: List[Dict], filename_suffix: str = "") -> str:
@@ -743,19 +746,19 @@ class ITEventsScraper:
         try:
             df = pd.DataFrame(events)
             df.to_csv(filepath, index=False, encoding='utf-8-sig')
-            self.logger.info(f"💾 Зачувани {len(events)} настани во: {filepath}")
+            self.logger.info(f" Зачувани {len(events)} настани во: {filepath}")
             return filepath
         except Exception as e:
-            self.logger.error(f"❌ Грешка при зачувување: {e}")
+            self.logger.error(f" Грешка при зачувување: {e}")
             return ""
 
     def print_summary(self, events: List[Dict]):
         """Прикажи резиме од скрепирањето"""
         if not events:
-            self.logger.info("📊 Нема настани за приказ")
+            self.logger.info(" Нема настани за приказ")
             return
 
-        self.logger.info(f"\n📊 === РЕЗИМЕ ===")
+        self.logger.info(f"\n === РЕЗИМЕ ===")
         self.logger.info(f"Вкупно настани: {len(events)}")
 
         # Статистики
@@ -770,7 +773,7 @@ class ITEventsScraper:
         self.logger.info(f"Со слика: {with_image}")
 
         # Примери
-        self.logger.info(f"\n📋 Првите 3 настани:")
+        self.logger.info(f"\n Првите 3 настани:")
         for i, event in enumerate(events[:3]):
             self.logger.info(f"{i + 1}. {event.get('title', 'Без наслов')}")
             self.logger.info(f"   Датум: {event.get('date_start', 'Без датум')}")
@@ -779,7 +782,7 @@ class ITEventsScraper:
     def run_full_scrape(self, max_pages: int = 50, save_results: bool = True) -> List[Dict]:
         """Изврши целосно скрепирање"""
         try:
-            self.logger.info("🚀 === ЗАПОЧНУВАМ СКРЕПИРАЊЕ ===")
+            self.logger.info(" === ЗАПОЧНУВАМ СКРЕПИРАЊЕ ===")
 
             # Setup
             self.setup_driver()
@@ -794,11 +797,11 @@ class ITEventsScraper:
             # Прикажи резиме
             self.print_summary(events)
 
-            self.logger.info("✅ === СКРЕПИРАЊЕТО ЗАВРШЕНО ===")
+            self.logger.info(" === СКРЕПИРАЊЕТО ЗАВРШЕНО ===")
             return events
 
         except Exception as e:
-            self.logger.error(f"❌ Критична грешка: {e}")
+            self.logger.error(f" Критична грешка: {e}")
             return []
         finally:
             self.close_driver()
@@ -806,7 +809,7 @@ class ITEventsScraper:
 
 def main():
     """Главна функција"""
-    print("🎯 IT Events Scraper - Подобрена верзија")
+    print(" IT Events Scraper - Подобрена верзија")
     print("=" * 50)
 
     # Креирај скрепер со debug
@@ -820,26 +823,26 @@ def main():
         events = scraper.run_full_scrape(max_pages=50, save_results=True)
 
         if events:
-            print(f"\n🎉 Успешно скрепирани {len(events)} настани!")
+            print(f"\n Успешно скрепирани {len(events)} настани!")
 
             # Прикажи неколку примери
-            print("\n📋 Примери:")
+            print("\n Примери:")
             for i, event in enumerate(events[:3]):
                 print(f"{i + 1}. {event.get('title', 'Без наслов')}")
-                print(f"   📅 Датум: {event.get('date_start', 'Без датум')}")
-                print(f"   🏢 Организатор: {event.get('organizer', 'Непознат')}")
-                print(f"   🔗 URL: {event.get('url', 'Без URL')}")
-                print(f"   📝 Опис: {event.get('description', 'Без опис')[:100]}...")
+                print(f"    Датум: {event.get('date_start', 'Без датум')}")
+                print(f"    Организатор: {event.get('organizer', 'Непознат')}")
+                print(f"    URL: {event.get('url', 'Без URL')}")
+                print(f"    Опис: {event.get('description', 'Без опис')[:100]}...")
                 print()
         else:
-            print("❌ Не се скрепирани настани. Проверете ја конфигурацијата.")
+            print(" Не се скрепирани настани. Проверете ја конфигурацијата.")
 
     except KeyboardInterrupt:
-        print("\n⏹️ Скрепирањето е прекинато од корисникот")
+        print("\n⏹ Скрепирањето е прекинато од корисникот")
     except Exception as e:
-        print(f"\n❌ Неочекувана грешка: {e}")
+        print(f"\n Неочекувана грешка: {e}")
     finally:
-        print("\n👋 Крај на програмата")
+        print("\n Крај на програмата")
 
 
 if __name__ == "__main__":

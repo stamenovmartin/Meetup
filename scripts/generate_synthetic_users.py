@@ -194,7 +194,7 @@ def generate_synthetic_dataset(num_users_per_archetype=5, interactions_per_user=
 
     with app.app_context():
         print("=" * 80)
-        print("🤖 GENERATING SYNTHETIC USERS & INTERACTIONS")
+        print(" GENERATING SYNTHETIC USERS & INTERACTIONS")
         print("=" * 80)
 
         stats = {
@@ -204,7 +204,7 @@ def generate_synthetic_dataset(num_users_per_archetype=5, interactions_per_user=
         }
 
         for archetype_name, archetype_data in USER_ARCHETYPES.items():
-            print(f"\n📊 Creating {archetype_name} users...")
+            print(f"\n Creating {archetype_name} users...")
 
             archetype_stats = {
                 'users': 0,
@@ -232,14 +232,14 @@ def generate_synthetic_dataset(num_users_per_archetype=5, interactions_per_user=
 
         # Final statistics
         print("\n" + "=" * 80)
-        print("✅ SYNTHETIC DATA GENERATION COMPLETE!")
+        print(" SYNTHETIC DATA GENERATION COMPLETE!")
         print("=" * 80)
-        print(f"\n📊 Summary:")
+        print(f"\n Summary:")
         print(f"  • Total Users Created: {stats['users_created']}")
         print(f"  • Total Interactions Created: {stats['interactions_created']}")
         print(f"  • Avg Interactions per User: {stats['interactions_created'] / stats['users_created']:.1f}")
 
-        print(f"\n📈 By Archetype:")
+        print(f"\n By Archetype:")
         for arch, arch_stats in stats['by_archetype'].items():
             print(f"  • {arch}: {arch_stats['users']} users, {arch_stats['interactions']} interactions")
 
@@ -249,14 +249,14 @@ def generate_synthetic_dataset(num_users_per_archetype=5, interactions_per_user=
         total_likes = Attendance.query.filter_by(rating=1).count()
         total_dislikes = Attendance.query.filter_by(rating=-1).count()
 
-        print(f"\n🗄️  Final Database Stats:")
+        print(f"\n  Final Database Stats:")
         print(f"  • Total Users: {total_users}")
         print(f"  • Total Interactions: {total_interactions}")
         print(f"  • Likes: {total_likes} ({total_likes/total_interactions*100:.1f}%)")
         print(f"  • Dislikes: {total_dislikes} ({total_dislikes/total_interactions*100:.1f}%)")
 
         print("\n" + "=" * 80)
-        print("🚀 Ready for GNN Evaluation!")
+        print(" Ready for GNN Evaluation!")
         print("=" * 80)
 
         return stats

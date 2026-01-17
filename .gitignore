@@ -1,1 +1,48 @@
+# Dependencies
 node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment variables (IMPORTANT: keep secrets out of git!)
+.env
+.env.local
+.env.production
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Logs
+logs/
+*.log
+
+# Database (local development)
+# Note: Keeping instance/meetup.db for demo purposes
+# *.db
+# instance/*.db
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Temporary files
+*.tmp
+*.temp

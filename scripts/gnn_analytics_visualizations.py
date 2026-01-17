@@ -36,13 +36,13 @@ plt.rcParams['font.size'] = 10
 
 def analyze_score_distribution(user_id: int = 1):
     """Анализа на дистрибуција на препораки скорови"""
-    print("\n📊 АНАЛIZA 1: Дистрибуција на препораки скорови\n")
+    print("\n АНАЛIZA 1: Дистрибуција на препораки скорови\n")
 
     recommender = get_recommender()
     recommendations = recommender.recommend_events(user_id=user_id, limit=10000)
 
     if not recommendations:
-        print("❌ Нема препораки за анализа!")
+        print(" Нема препораки за анализа!")
         return
 
     # Извлечи податоци
@@ -92,13 +92,13 @@ def analyze_score_distribution(user_id: int = 1):
 
     plt.tight_layout()
     plt.savefig('docs/analytics/01_score_distribution.png', dpi=300, bbox_inches='tight')
-    print("✅ Saved: docs/analytics/01_score_distribution.png")
+    print(" Saved: docs/analytics/01_score_distribution.png")
     plt.close()
 
 
 def compare_gnn_vs_traditional(user_id: int = 1, sample_size: int = 100):
     """Споредба помеѓу GNN и традиционален scoring"""
-    print("\n📊 АНАЛИЗА 2: GNN vs Traditional Scoring\n")
+    print("\n АНАЛИЗА 2: GNN vs Traditional Scoring\n")
 
     recommender = get_recommender()
     events = Event.query.limit(sample_size).all()
@@ -173,13 +173,13 @@ def compare_gnn_vs_traditional(user_id: int = 1, sample_size: int = 100):
 
     plt.tight_layout()
     plt.savefig('docs/analytics/02_gnn_vs_traditional.png', dpi=300, bbox_inches='tight')
-    print("✅ Saved: docs/analytics/02_gnn_vs_traditional.png")
+    print(" Saved: docs/analytics/02_gnn_vs_traditional.png")
     plt.close()
 
 
 def analyze_tag_distribution(user_id: int = 1):
     """Анализа на тагови во top препораки"""
-    print("\n📊 АНАЛИЗА 3: Tag Distribution in Recommendations\n")
+    print("\n АНАЛИЗА 3: Tag Distribution in Recommendations\n")
 
     recommender = get_recommender()
     recommendations = recommender.recommend_events(user_id=user_id, limit=100)
@@ -195,7 +195,7 @@ def analyze_tag_distribution(user_id: int = 1):
     top_tags = tag_counts.most_common(15)
 
     if not top_tags:
-        print("❌ Нема тагови за анализа!")
+        print(" Нема тагови за анализа!")
         return
 
     print(f"Најчести тагови во топ 100 препораки:")
@@ -224,13 +224,13 @@ def analyze_tag_distribution(user_id: int = 1):
 
     plt.tight_layout()
     plt.savefig('docs/analytics/03_tag_distribution.png', dpi=300, bbox_inches='tight')
-    print("✅ Saved: docs/analytics/03_tag_distribution.png")
+    print(" Saved: docs/analytics/03_tag_distribution.png")
     plt.close()
 
 
 def analyze_user_behavior(user_id: int = 1):
     """Анализа на user интеракции (likes/dislikes)"""
-    print("\n📊 АНАЛИЗА 4: User Behavior Patterns\n")
+    print("\n АНАЛИЗА 4: User Behavior Patterns\n")
 
     # Земи user attendance
     likes = Attendance.query.filter_by(user_id=user_id, rating=1).all()
@@ -241,7 +241,7 @@ def analyze_user_behavior(user_id: int = 1):
     print(f"  • Dislikes: {len(dislikes)}")
 
     if not likes and not dislikes:
-        print("❌ Нема user интеракции за анализа!")
+        print(" Нема user интеракции за анализа!")
         return
 
     # Тагови од likes/dislikes
@@ -318,13 +318,13 @@ def analyze_user_behavior(user_id: int = 1):
 
     plt.tight_layout()
     plt.savefig('docs/analytics/04_user_behavior.png', dpi=300, bbox_inches='tight')
-    print("✅ Saved: docs/analytics/04_user_behavior.png")
+    print(" Saved: docs/analytics/04_user_behavior.png")
     plt.close()
 
 
 def analyze_recommendation_quality(user_id: int = 1):
     """Анализа на квалитет на препораки"""
-    print("\n📊 АНАЛИЗА 5: Recommendation Quality Metrics\n")
+    print("\n АНАЛИЗА 5: Recommendation Quality Metrics\n")
 
     recommender = get_recommender()
 
@@ -332,7 +332,7 @@ def analyze_recommendation_quality(user_id: int = 1):
     recommendations = recommender.recommend_events(user_id=user_id, limit=50)
 
     if not recommendations:
-        print("❌ Нема препораки!")
+        print(" Нема препораки!")
         return
 
     # Анализа на скорови по декили
@@ -402,14 +402,14 @@ def analyze_recommendation_quality(user_id: int = 1):
 
     plt.tight_layout()
     plt.savefig('docs/analytics/05_recommendation_quality.png', dpi=300, bbox_inches='tight')
-    print("✅ Saved: docs/analytics/05_recommendation_quality.png")
+    print(" Saved: docs/analytics/05_recommendation_quality.png")
     plt.close()
 
 
 def generate_full_report(user_id: int = 1):
     """Генерирај целосен аналитички извештај"""
     print("=" * 80)
-    print("🚀 GNN RECOMMENDATION SYSTEM - FULL ANALYTICS REPORT")
+    print(" GNN RECOMMENDATION SYSTEM - FULL ANALYTICS REPORT")
     print("=" * 80)
     print(f"User ID: {user_id}")
     print(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -426,18 +426,18 @@ def generate_full_report(user_id: int = 1):
         analyze_recommendation_quality(user_id)
 
         print("\n" + "=" * 80)
-        print("✅ СИТЕ АНАЛИТИКИ ГЕНЕРИРАНИ УСПЕШНО!")
+        print(" СИТЕ АНАЛИТИКИ ГЕНЕРИРАНИ УСПЕШНО!")
         print("=" * 80)
         print("\nГенерирани фајлови:")
-        print("  📊 docs/analytics/01_score_distribution.png")
-        print("  📊 docs/analytics/02_gnn_vs_traditional.png")
-        print("  📊 docs/analytics/03_tag_distribution.png")
-        print("  📊 docs/analytics/04_user_behavior.png")
-        print("  📊 docs/analytics/05_recommendation_quality.png")
+        print("   docs/analytics/01_score_distribution.png")
+        print("   docs/analytics/02_gnn_vs_traditional.png")
+        print("   docs/analytics/03_tag_distribution.png")
+        print("   docs/analytics/04_user_behavior.png")
+        print("   docs/analytics/05_recommendation_quality.png")
         print("=" * 80)
 
     except Exception as e:
-        print(f"\n❌ ГРЕШКА: {e}")
+        print(f"\n ГРЕШКА: {e}")
         import traceback
         traceback.print_exc()
 
@@ -454,6 +454,6 @@ if __name__ == '__main__':
             try:
                 target_user = int(sys.argv[1])
             except ValueError:
-                print(f"⚠️  Invalid user ID, using default: {target_user}")
+                print(f"  Invalid user ID, using default: {target_user}")
 
         generate_full_report(user_id=target_user)

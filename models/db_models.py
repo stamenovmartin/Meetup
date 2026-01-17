@@ -18,6 +18,11 @@ class User(db.Model):
     lon = db.Column(db.Float)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Relationships
+    profile = db.relationship('UserProfile', backref='user', uselist=False, lazy='select')
+    posts = db.relationship('Post', backref='author', lazy='dynamic')
+    attendances = db.relationship('Attendance', backref='user', lazy='dynamic')
+
     def set_password(self, raw: str):
         self.password_hash = generate_password_hash(raw)
 
@@ -53,6 +58,12 @@ class Event(db.Model):
     created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     tags = db.Column(db.String(500))  # comma-separated (music, tech, meetup,...)
 
+    # Relationships
+    venue = db.relationship('Venue', backref='events', lazy='select')
+    creator = db.relationship('User', backref='created_events', lazy='select')
+    posts = db.relationship('Post', backref='event', lazy='dynamic')
+    attendances = db.relationship('Attendance', backref='event', lazy='dynamic')
+
 # --- Attendance & Ratings ---
 
 class Attendance(db.Model):
@@ -66,6 +77,12 @@ class Attendance(db.Model):
     event_id = db.Column(db.Integer, db.ForeignKey("events.id"), nullable=False, index=True)
     rating = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Unique constraint - еден корисник може да има само еден rating по настан
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'event_id', name='unique_user_event_attendance'),
+        db.CheckConstraint('rating IN (-1, 0, 1)', name='valid_rating_values'),
+    )
 
 # --- Groups ---
 
@@ -136,11 +153,3 @@ class PostComment(db.Model):
     post_id = db.Column(db.Integer, db.ForeignKey("posts.id"), nullable=False)
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-# Додај и relations за полесно користење:
-# Во User класата додај:
-# profile = db.relationship('UserProfile', backref='user', uselist=False)
-# posts = db.relationship('Post', backref='author', lazy='dynamic')
-
-# Во Event класата додај:
-# posts = db.relationship('Post', backref='event', lazy='dynamic')

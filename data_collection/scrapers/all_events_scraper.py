@@ -9,6 +9,8 @@ import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import os
@@ -118,6 +120,8 @@ class AllEventsScraper:
         chrome_options.add_experimental_option('useAutomationExtension', False)
         chrome_options.add_argument(
             "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        service = Service(ChromeDriverManager().install())
+        self.driver = webdriver.Chrome(service=service, options=chrome_options)
 
         self.driver = webdriver.Chrome(options=chrome_options)
         self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
@@ -193,7 +197,7 @@ class AllEventsScraper:
                 except json.JSONDecodeError:
                     continue
         except Exception as e:
-            print(f"    ⚠️ Грешка при извлекување JSON-LD: {e}")
+            print(f"     Грешка при извлекување JSON-LD: {e}")
 
         return json_ld_data
 
@@ -220,7 +224,7 @@ class AllEventsScraper:
             for category, patterns in url_patterns.items():
                 for pattern in patterns:
                     if pattern in url_lower:
-                        print(f"    🔍 Категорија од URL: {category}")
+                        print(f"     Категорија од URL: {category}")
                         return category
 
             # 2. Провери meta tags
@@ -230,7 +234,7 @@ class AllEventsScraper:
                 if keywords_content:
                     detected_cat = self.detect_category_from_text(keywords_content)
                     if detected_cat != 'event':
-                        print(f"    🔍 Категорија од meta keywords: {detected_cat}")
+                        print(f"     Категорија од meta keywords: {detected_cat}")
                         return detected_cat
             except:
                 pass
@@ -241,7 +245,7 @@ class AllEventsScraper:
             if json_ld_data.get('category'):
                 detected_cat = self.detect_category_from_text(json_ld_data['category'])
                 if detected_cat != 'event':
-                    print(f"    🔍 Категорија од JSON-LD: {detected_cat}")
+                    print(f"     Категорија од JSON-LD: {detected_cat}")
                     return detected_cat
 
             # 4. Анализирај breadcrumbs
@@ -251,7 +255,7 @@ class AllEventsScraper:
                     text = breadcrumb.text
                     detected_cat = self.detect_category_from_text(text)
                     if detected_cat != 'event':
-                        print(f"    🔍 Категорија од breadcrumbs: {detected_cat}")
+                        print(f"     Категорија од breadcrumbs: {detected_cat}")
                         return detected_cat
             except:
                 pass
@@ -270,7 +274,7 @@ class AllEventsScraper:
                 combined_text = f"{title} {description}"
                 detected_cat = self.detect_category_from_text(combined_text)
                 if detected_cat != 'event':
-                    print(f"    🔍 Категорија од содржина: {detected_cat}")
+                    print(f"     Категорија од содржина: {detected_cat}")
                     return detected_cat
             except:
                 pass
@@ -282,13 +286,13 @@ class AllEventsScraper:
                 all_tags_text = " ".join([tag.text for tag in tags])
                 detected_cat = self.detect_category_from_text(all_tags_text)
                 if detected_cat != 'event':
-                    print(f"    🔍 Категорија од tags: {detected_cat}")
+                    print(f"     Категорија од tags: {detected_cat}")
                     return detected_cat
             except:
                 pass
 
         except Exception as e:
-            print(f"    ⚠️ Грешка при детекција на категорија: {e}")
+            print(f"     Грешка при детекција на категорија: {e}")
 
         return 'event'
 
@@ -306,7 +310,7 @@ class AllEventsScraper:
             return details
 
         try:
-            print(f"  📄 Влегувам во: {event_url}")
+            print(f"   Влегувам во: {event_url}")
             self.driver.get(event_url)
             time.sleep(4)
 
@@ -326,9 +330,9 @@ class AllEventsScraper:
                         details['organizer'] = org_element.text.strip()
 
                 if details['organizer']:
-                    print(f"    🏢 Организатор: {details['organizer']}")
+                    print(f"     Организатор: {details['organizer']}")
             except:
-                print(f"    ⚠️ Организатор не најден")
+                print(f"     Организатор не најден")
 
             # 2. Duration - од времето
             try:
@@ -341,7 +345,7 @@ class AllEventsScraper:
                         start_time = time_match.group(1)
                         end_time = time_match.group(2)
                         details['duration'] = f"{start_time} - {end_time}"
-                        print(f"    ⏱️ Времетраење: {details['duration']}")
+                        print(f"    ⏱ Времетраење: {details['duration']}")
             except:
                 try:
                     duration_elements = self.driver.find_elements(By.XPATH,
@@ -349,10 +353,10 @@ class AllEventsScraper:
                     for elem in duration_elements:
                         if elem.text.strip():
                             details['duration'] = elem.text.strip()
-                            print(f"    ⏱️ Времетраење: {details['duration']}")
+                            print(f"    ⏱ Времетраење: {details['duration']}")
                             break
                 except:
-                    print(f"    ⚠️ Времетраење не најдено")
+                    print(f"     Времетраење не најдено")
 
             # 3. Полна локација
             try:
@@ -374,18 +378,18 @@ class AllEventsScraper:
                         details['location_full'] = full_location
 
                 if details['location_full']:
-                    print(f"    📍 Локација: {details['location_full'][:50]}...")
+                    print(f"     Локација: {details['location_full'][:50]}...")
             except:
-                print(f"    ⚠️ Локација не најдена")
+                print(f"     Локација не најдена")
 
             # 4. КАТЕГОРИЈА - Автоматска детекција
             try:
                 # Детектирај категорија од целата страница
                 detected_category = self.detect_category_from_page()
                 details['category'] = detected_category
-                print(f"    🎭 Категорија: {details['category']}")
+                print(f"     Категорија: {details['category']}")
             except Exception as e:
-                print(f"    ⚠️ Грешка при детекција на категорија: {e}")
+                print(f"     Грешка при детекција на категорија: {e}")
                 details['category'] = 'event'
 
             # 5. Опис
@@ -402,12 +406,12 @@ class AllEventsScraper:
                         details['description_full'] = desc_text
 
                 if details['description_full']:
-                    print(f"    📝 Опис: {details['description_full'][:50]}...")
+                    print(f"     Опис: {details['description_full'][:50]}...")
             except:
-                print(f"    ⚠️ Опис не најден")
+                print(f"     Опис не најден")
 
         except Exception as e:
-            print(f"    ❌ Грешка при скрепирање: {e}")
+            print(f"     Грешка при скрепирање: {e}")
 
         return details
 
@@ -437,13 +441,13 @@ class AllEventsScraper:
             return 'event'
 
     def scrape_events(self) -> List[Dict]:
-        print("🔍 Скрепирам настани од AllEvents Скопје...")
+        print(" Скрепирам настани од AllEvents Скопје...")
 
         self.driver.get(self.skopje_url)
-        time.sleep(8)
-        self.load_all_events(max_clicks=15, wait_time=4)
+        time.sleep(3)  # Намалено од 8 на 3 секунди
+        self.load_all_events(max_clicks=5, wait_time=2)  # Намалено од 15/4 на 5/2
 
-        print(f"\n📋 Обработувам настани од главната страница...")
+        print(f"\n Обработувам настани од главната страница...")
 
         event_selectors_to_try = [
             ".event-card",
@@ -461,12 +465,12 @@ class AllEventsScraper:
                 break
 
         if not event_items:
-            print("   ❌ Нема настани на страницата")
+            print("    Нема настани на страницата")
             return []
 
         all_events = self.extract_basic_event_data(event_items, "Главна страница")
 
-        print(f"\n✅ ФАЗА 1 завршена: Собрани {len(all_events)} настани")
+        print(f"\n ФАЗА 1 завршена: Собрани {len(all_events)} настани")
 
         # Отстрани дупликати
         unique_events = []
@@ -477,39 +481,13 @@ class AllEventsScraper:
                 unique_events.append(event)
                 seen_events.add(event_key)
 
-        print(f"🧹 После отстранување дупликати: {len(unique_events)} уникатни настани")
+        print(f" После отстранување дупликати: {len(unique_events)} уникатни настани")
 
-        # ФАЗА 2: Детално скрепирање
-        print("\n🎬 ФАЗА 2: Собирам детални податоци...")
-        detailed_events = []
+        # ФАЗА 2: ОНЕВОЗМОЖЕНА - многу спора, собираме само основни податоци
+        print("\n ФАЗА 2: ПРЕСКОКНАТА (за побрзина)")
+        detailed_events = unique_events  # Користи основни податоци без детали
 
-        for i, event in enumerate(unique_events):
-            print(f"\n🎭 {i + 1}/{len(unique_events)} - {event['title']}")
-
-            if event['url'] and event['url'] != self.base_url:
-                try:
-                    event_details = self.scrape_event_details(event['url'])
-
-                    # Ажурирај со детални податоци
-                    if event_details['description_full']:
-                        event['description'] = event_details['description_full']
-                    if event_details['organizer']:
-                        event['organizer'] = event_details['organizer']
-                    if event_details['duration']:
-                        event['duration'] = event_details['duration']
-                    if event_details['location_full']:
-                        event['location'] = event_details['location_full']
-                    if event_details['category'] and event_details['category'] != 'event':
-                        event['category'] = event_details['category']
-
-                except Exception as e:
-                    print(f"    ❌ Грешка при детално скрепирање: {e}")
-            else:
-                print(f"    ⏭️ Прескокнувам (нема валиден линк)")
-
-            detailed_events.append(event)
-
-        print(f"\n✅ ФАЗА 2 завршена: {len(detailed_events)} настани со детали")
+        print(f"\n Завршено: {len(detailed_events)} настани со основни податоци")
 
         # Печати статистика за категории
         category_stats = {}
@@ -517,7 +495,7 @@ class AllEventsScraper:
             cat = event.get('category', 'event')
             category_stats[cat] = category_stats.get(cat, 0) + 1
 
-        print("\n📊 Статистика на категории:")
+        print("\n Статистика на категории:")
         for cat, count in sorted(category_stats.items(), key=lambda x: x[1], reverse=True):
             print(f"   {cat}: {count} настани")
 
@@ -525,20 +503,27 @@ class AllEventsScraper:
 
     def load_all_events(self, max_clicks=10, wait_time=5):
         clicks = 0
+        max_wait_per_click = 10  # Макс 10 секунди за секое кликање
+
         while clicks < max_clicks:
             try:
-                load_more_button = self.driver.find_element(By.ID, "show_more_events")
-                if load_more_button.is_displayed() and load_more_button.is_enabled():
-                    print(f"Кликам на 'View More' ({clicks + 1}/{max_clicks})...")
-                    self.driver.execute_script("arguments[0].click();", load_more_button)
-                    time.sleep(wait_time)
-                    clicks += 1
-                else:
-                    print("Копчето 'View More' не е достапно.")
-                    break
+                # Додадено: timeout за да не чека бесконечно
+                from selenium.webdriver.support.ui import WebDriverWait
+                from selenium.webdriver.support import expected_conditions as EC
+
+                load_more_button = WebDriverWait(self.driver, max_wait_per_click).until(
+                    EC.element_to_be_clickable((By.ID, "show_more_events"))
+                )
+
+                print(f"Кликам на 'View More' ({clicks + 1}/{max_clicks})...")
+                self.driver.execute_script("arguments[0].click();", load_more_button)
+                time.sleep(wait_time)
+                clicks += 1
+
             except Exception as e:
-                print("Нема повеќе 'View More' копче или грешка:", e)
+                print(f"Нема повеќе 'View More' копче или timeout: {type(e).__name__}")
                 break
+
         print(f"Заврши со кликање на 'View More' {clicks} пати.")
 
     def extract_basic_event_data(self, event_items, source_name: str) -> List[Dict]:
@@ -666,7 +651,7 @@ class AllEventsScraper:
             except Exception as e:
                 continue
 
-        print(f"   ✅ {source_name}: {len(events)} настани")
+        print(f"    {source_name}: {len(events)} настани")
         return events
 
     def save_data(self, events: List[Dict]):
@@ -705,9 +690,9 @@ class AllEventsScraper:
         processed_path = f"{self.processed_data_dir}/allevents_events_{timestamp}.csv"
         df_processed.to_csv(processed_path, index=False, encoding='utf-8')
 
-        print(f"💾 Зачувано:")
-        print(f"   📄 Raw data: {raw_path}")
-        print(f"   📊 Processed data: {processed_path}")
+        print(f" Зачувано:")
+        print(f"    Raw data: {raw_path}")
+        print(f"    Processed data: {processed_path}")
 
     def run_scraping(self) -> Dict:
         self.clean_old_files()
@@ -732,9 +717,9 @@ def main():
     results = scraper.run_scraping()
 
     if results['total_events'] > 0:
-        print(f"✅ Најдени {results['total_events']} настани!")
+        print(f" Најдени {results['total_events']} настани!")
     else:
-        print("❌ Нема резултати")
+        print(" Нема резултати")
 
 
 if __name__ == "__main__":

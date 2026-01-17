@@ -260,7 +260,7 @@ class EventAnalyticsDashboard:
             bars2 = axes[1, 1].bar(x_pos + width / 2, source_free['paid'], width,
                                    label='Платени', color='#e74c3c', alpha=0.8)
 
-            axes[1, 1].set_title('💰 Цени по извор', fontweight='bold', fontsize=14)
+            axes[1, 1].set_title(' Цени по извор', fontweight='bold', fontsize=14)
             axes[1, 1].set_xlabel('Извор')
             axes[1, 1].set_ylabel('Број на настани')
             axes[1, 1].set_xticks(x_pos)

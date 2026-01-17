@@ -19,13 +19,13 @@ warnings.filterwarnings('ignore')
 class GraphConstructor:
     """Креира графови од event податоци"""
 
-    def __init__(self, data_dir=None, output_dir="../graph_construction/graph_data"):
+    def __init__(self, data_dir=None, output_dir="graph_construction/graph_data"):
         if data_dir is None:
             data_dir = self.find_cleaned_data_dir()
 
         self.data_dir = Path(data_dir) if data_dir else None
         self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(exist_ok=True)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
         self.df = pd.DataFrame()
         self.graphs = {}
@@ -37,7 +37,7 @@ class GraphConstructor:
 
     def find_cleaned_data_dir(self):
         """FIXED: Подобрена автоматска детекција на cleaned_data папката"""
-        print("🔍 Барам cleaned_data папка...")
+        print(" Барам cleaned_data папка...")
 
         # Проширена листа на можни патишта
         possible_paths = [
@@ -47,53 +47,53 @@ class GraphConstructor:
 
             # data_collection папка
             Path("data_collection/cleaned_data"),
-            Path("data_collection/NLP_data/cleaned_data"),  # ✅ ДОДАДЕНО!
+            Path("data_collection/NLP_data/cleaned_data"),  #  ДОДАДЕНО!
 
             # Еден ниво нагоре
             Path("../cleaned_data"),
             Path("../data_collection/cleaned_data"),
-            Path("../data_collection/NLP_data/cleaned_data"),  # ✅ ДОДАДЕНО!
+            Path("../data_collection/NLP_data/cleaned_data"),  #  ДОДАДЕНО!
 
             # graph_construction папка
             Path("graph_data"),
             Path("graph_construction/graph_data"),
 
             # Root на проектот
-            Path("../../data_collection/NLP_data/cleaned_data"),  # ✅ ДОДАДЕНО!
+            Path("../../data_collection/NLP_data/cleaned_data"),  #  ДОДАДЕНО!
         ]
 
         for path in possible_paths:
-            print(f"   🔍 Проверувам: {path}")
+            print(f"    Проверувам: {path}")
             if path.exists():
                 # Провери дали има CSV фајлови
                 csv_files = list(path.glob("*.csv"))
                 if csv_files:
-                    print(f"   ✅ Пронајдена со {len(csv_files)} CSV фајлови: {path}")
+                    print(f"    Пронајдена со {len(csv_files)} CSV фајлови: {path}")
                     return str(path)
                 else:
-                    print(f"   ⚠️ Папката постои но нема CSV фајлови: {path}")
+                    print(f"    Папката постои но нема CSV фајлови: {path}")
             else:
-                print(f"   ❌ Не постои: {path}")
+                print(f"    Не постои: {path}")
 
-        print("❌ Не можам да најдам cleaned_data папка!")
+        print(" Не можам да најдам cleaned_data папка!")
         return None
 
     def load_data(self):
         """Вчитај cleaned податоци"""
-        print("📂 Вчитување на cleaned податоци...")
+        print(" Вчитување на cleaned податоци...")
 
         if self.data_dir is None:
-            print("❌ Нема валидна патека до податоци!")
+            print(" Нема валидна патека до податоци!")
             return False
 
-        print(f"🔍 Користам папка: {self.data_dir}")
+        print(f" Користам папка: {self.data_dir}")
 
         if not self.data_dir.exists():
-            print(f"❌ Папката не постои: {self.data_dir}")
+            print(f" Папката не постои: {self.data_dir}")
             return False
 
         # FIXED: Подобрено барање на фајлови
-        print("📁 Содржина на папката:")
+        print(" Содржина на папката:")
         files_found = []
         for item in self.data_dir.iterdir():
             print(f"   - {item.name}")
@@ -101,7 +101,7 @@ class GraphConstructor:
                 files_found.append(item)
 
         if not files_found:
-            print("❌ Нема CSV фајлови во папката!")
+            print(" Нема CSV фајлови во папката!")
             return False
 
         # Приоритет на фајлови
@@ -124,7 +124,7 @@ class GraphConstructor:
             # Земи го првиот CSV фајл
             selected_file = files_found[0]
 
-        print(f"📄 Користам фајл: {selected_file.name}")
+        print(f" Користам фајл: {selected_file.name}")
 
         try:
             # FIXED: Пробај различни encoding опции
@@ -133,31 +133,31 @@ class GraphConstructor:
             for encoding in encodings:
                 try:
                     self.df = pd.read_csv(selected_file, encoding=encoding)
-                    print(f"✅ Успешно вчитано со {encoding} encoding")
+                    print(f" Успешно вчитано со {encoding} encoding")
                     break
                 except UnicodeDecodeError:
-                    print(f"   ❌ {encoding} не работи, пробувам следен...")
+                    print(f"    {encoding} не работи, пробувам следен...")
                     continue
             else:
-                print("❌ Не можам да го прочитам фајлот со ниеден encoding!")
+                print(" Не можам да го прочитам фајлот со ниеден encoding!")
                 return False
 
-            print(f"✅ Вчитани {len(self.df):,} записи")
-            print(f"📊 Колони ({len(self.df.columns)}): {list(self.df.columns)}")
+            print(f" Вчитани {len(self.df):,} записи")
+            print(f" Колони ({len(self.df.columns)}): {list(self.df.columns)}")
 
             # Прикажи првите неколку записи
-            print(f"📋 Примери податоци:")
+            print(f" Примери податоци:")
             print(self.df.head(2).to_string())
 
             return True
 
         except Exception as e:
-            print(f"❌ Грешка при вчитување: {e}")
+            print(f" Грешка при вчитување: {e}")
             return False
 
     def prepare_features(self):
         """FIXED: Подобрена подготовка на features"""
-        print("🔧 Подготовка на features...")
+        print(" Подготовка на features...")
 
         # Креирај уникатни ID-ја
         if 'node_id' not in self.df.columns:
@@ -168,7 +168,7 @@ class GraphConstructor:
         missing_cols = [col for col in required_cols if col not in self.df.columns]
 
         if missing_cols:
-            print(f"⚠️ Недостасуваат колони: {missing_cols}")
+            print(f" Недостасуваат колони: {missing_cols}")
             # Креирај празни колони
             for col in missing_cols:
                 self.df[col] = ''
@@ -178,26 +178,29 @@ class GraphConstructor:
             self.prepare_text_features()
             self.prepare_categorical_features()
             self.prepare_numerical_features()
-            print(f"✅ Features подготвени за {len(self.df)} настани")
+            print(f" Features подготвени за {len(self.df)} настани")
             return True
         except Exception as e:
-            print(f"❌ Грешка при подготовка на features: {e}")
+            print(f" Грешка при подготовка на features: {e}")
             return False
 
     def prepare_text_features(self):
-        """FIXED: Подобрена TF-IDF обработка"""
-        print("   📝 TF-IDF features...")
+        """FIXED: Подобрена TF-IDF обработка со tags поддршка"""
+        print("    TF-IDF features...")
 
-        # FIXED: Правилно комбинирање на pandas колони
+        # FIXED: Правилно комбинирање на pandas колони - додадени tags
         combined_parts = []
 
-        for col in ['title', 'description', 'category']:
+        for col in ['title', 'description', 'category', 'tags']:
             if col in self.df.columns:
                 cleaned_col = self.df[col].fillna('').astype(str)
+                # Ако е tags колона, замени запирки со празно место
+                if col == 'tags':
+                    cleaned_col = cleaned_col.str.replace(',', ' ')
                 combined_parts.append(cleaned_col)
 
         if not combined_parts:
-            print("   ⚠️ Нема текстуални колони, користам dummy features")
+            print("    Нема текстуални колони, користам dummy features")
             self.tfidf_features = np.ones((len(self.df), 10))  # Dummy features
             self.feature_names = [f"dummy_feature_{i}" for i in range(10)]
             return
@@ -215,18 +218,19 @@ class GraphConstructor:
         # Филтрирај празни текстови
         non_empty_mask = self.df['combined_text'].str.len() > 0
         if non_empty_mask.sum() == 0:
-            print("   ⚠️ Сите текстови се празни, користам dummy features")
+            print("    Сите текстови се празни, користам dummy features")
             self.tfidf_features = np.ones((len(self.df), 10))
             self.feature_names = [f"dummy_feature_{i}" for i in range(10)]
             return
 
         try:
-            # TF-IDF векторизација
+            # TF-IDF векторизација - зголемено за подобра разновидност
             vectorizer = TfidfVectorizer(
-                max_features=50,  # Намалено за помала комплексност
+                max_features=100,  # Зголемено од 50 на 100 за подобра разновидност
                 stop_words='english',
                 ngram_range=(1, 2),
-                min_df=1,  # Намалено за мали dataset-и
+                min_df=2,  # Барем 2 документи за да биде релевантен term
+                max_df=0.8,  # Игнорирај зборови што се појавуваат во над 80% настани
                 token_pattern=r'\b[a-zA-Z]{2,}\b'  # Само букви, мин 2 карактери
             )
 
@@ -234,51 +238,22 @@ class GraphConstructor:
             self.tfidf_features = tfidf_matrix.toarray()
             self.feature_names = vectorizer.get_feature_names_out()
 
-            print(f"      ✅ TF-IDF: {self.tfidf_features.shape}")
+            print(f"       TF-IDF: {self.tfidf_features.shape}")
 
         except Exception as e:
-            print(f"   ⚠️ TF-IDF грешка: {e}, користам dummy features")
-            self.tfidf_features = np.ones((len(self.df), 10))
-            self.feature_names = [f"dummy_feature_{i}" for i in range(10)]
-
-        # Филтрирај празни текстови
-        non_empty_mask = self.df['combined_text'].str.len() > 0
-        if non_empty_mask.sum() == 0:
-            print("   ⚠️ Сите текстови се празни, користам dummy features")
-            self.tfidf_features = np.ones((len(self.df), 10))
-            self.feature_names = [f"dummy_feature_{i}" for i in range(10)]
-            return
-
-        try:
-            # TF-IDF векторизација
-            vectorizer = TfidfVectorizer(
-                max_features=50,  # Намалено за помала комплексност
-                stop_words='english',
-                ngram_range=(1, 2),
-                min_df=1,  # Намалено за мали dataset-и
-                token_pattern=r'\b[a-zA-Z]{2,}\b'  # Само букви, мин 2 карактери
-            )
-
-            tfidf_matrix = vectorizer.fit_transform(self.df['combined_text'])
-            self.tfidf_features = tfidf_matrix.toarray()
-            self.feature_names = vectorizer.get_feature_names_out()
-
-            print(f"      ✅ TF-IDF: {self.tfidf_features.shape}")
-
-        except Exception as e:
-            print(f"   ⚠️ TF-IDF грешка: {e}, користам dummy features")
+            print(f"    TF-IDF грешка: {e}, користам dummy features")
             self.tfidf_features = np.ones((len(self.df), 10))
             self.feature_names = [f"dummy_feature_{i}" for i in range(10)]
 
     def prepare_categorical_features(self):
-        """FIXED: Подобрена обработка на категорички features"""
-        print("   🏷️ Категорички features...")
+        """FIXED: Подобрена обработка на категорички features - игнорира безкорисни метрики"""
+        print("    Категорички features...")
 
         categorical_cols = ['category', 'organizer', 'location', 'source']
         available_cols = [col for col in categorical_cols if col in self.df.columns]
 
         if not available_cols:
-            print("   ⚠️ Нема категорички колони, користам dummy features")
+            print("    Нема категорички колони, користам dummy features")
             self.categorical_features = np.zeros((len(self.df), 1))
             return
 
@@ -290,24 +265,38 @@ class GraphConstructor:
                 cleaned_col = self.df[col].fillna('Unknown').astype(str)
                 cleaned_col = cleaned_col.replace('', 'Unknown')
 
+                # Провери колку % се Unknown
+                unknown_pct = (cleaned_col == 'Unknown').sum() / len(cleaned_col)
+
+                if unknown_pct > 0.90:
+                    print(f"       {col}: ПРЕСКОКНАТО ({unknown_pct*100:.1f}% се Unknown)")
+                    continue
+
                 le = LabelEncoder()
                 encoded = le.fit_transform(cleaned_col)
+
+                # Провери дали има доволно разновидност
+                unique_count = len(le.classes_)
+                if unique_count < 2:
+                    print(f"       {col}: ПРЕСКОКНАТО (само {unique_count} уникатни вредности)")
+                    continue
+
                 self.categorical_features.append(encoded)
                 self.label_encoders[col] = le
-                print(f"      ✅ {col}: {len(le.classes_)} уникатни вредности")
+                print(f"       {col}: {unique_count} уникатни вредности ({unknown_pct*100:.1f}% Unknown)")
 
             except Exception as e:
-                print(f"      ⚠️ Проблем со {col}: {e}")
+                print(f"       Проблем со {col}: {e}")
 
         if self.categorical_features:
             self.categorical_features = np.column_stack(self.categorical_features)
-            print(f"      ✅ Категорички: {self.categorical_features.shape}")
+            print(f"       Категорички: {self.categorical_features.shape}")
         else:
             self.categorical_features = np.zeros((len(self.df), 1))
 
     def prepare_numerical_features(self):
         """FIXED: Подобрена обработка на нумерички features"""
-        print("   🔢 Нумерички features...")
+        print("    Нумерички features...")
 
         numerical_features = []
 
@@ -352,9 +341,9 @@ class GraphConstructor:
             # Стандардизирај
             try:
                 self.numerical_features = self.scaler.fit_transform(self.numerical_features)
-                print(f"      ✅ Нумерички: {self.numerical_features.shape}")
+                print(f"       Нумерички: {self.numerical_features.shape}")
             except Exception as e:
-                print(f"      ⚠️ Проблем со стандардизација: {e}")
+                print(f"       Проблем со стандардизација: {e}")
                 # Fallback: нормализирај рачно
                 for i in range(self.numerical_features.shape[1]):
                     col = self.numerical_features[:, i]
@@ -365,7 +354,7 @@ class GraphConstructor:
 
     def create_event_similarity_graph(self, similarity_threshold=0.1):  # FIXED: Намален threshold
         """FIXED: Креирај Event Similarity Graph со подобра обработка"""
-        print(f"🔗 Креирање Event Similarity Graph (threshold={similarity_threshold})...")
+        print(f" Креирање Event Similarity Graph (threshold={similarity_threshold})...")
 
         try:
             # Пресметај TF-IDF сличност
@@ -402,11 +391,11 @@ class GraphConstructor:
                         G.add_edge(i, j, weight=float(similarity), edge_type='similarity')
                         edges_added += 1
 
-            print(f"   ✅ {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
+            print(f"    {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
 
             # Ако нема доволно edges, намали го threshold
             if G.number_of_edges() < 10 and similarity_threshold > 0.05:
-                print(f"   ⚠️ Малку edges ({G.number_of_edges()}), пробувам со threshold=0.05")
+                print(f"    Малку edges ({G.number_of_edges()}), пробувам со threshold=0.05")
                 return self.create_event_similarity_graph(similarity_threshold=0.05)
 
             # Конвертирај во PyTorch Geometric
@@ -414,7 +403,7 @@ class GraphConstructor:
                 data = from_networkx(G)
             else:
                 # Креирај празен граф
-                print("   ⚠️ Нема edges, креирам празен граф")
+                print("    Нема edges, креирам празен граф")
                 data = Data()
                 data.num_nodes = len(self.df)
                 data.edge_index = torch.zeros((2, 0), dtype=torch.long)
@@ -429,6 +418,12 @@ class GraphConstructor:
             data.x = torch.tensor(all_features, dtype=torch.float)
             data.num_nodes = len(self.df)
 
+            # Add category labels if available
+            if 'category' in self.df.columns:
+                data.category_labels = self.df['category'].fillna('Unknown').astype(str).tolist()
+            else:
+                data.category_labels = None
+
             self.graphs['event_similarity'] = data
             self.stats['event_similarity'] = {
                 'nodes': G.number_of_nodes(),
@@ -440,12 +435,12 @@ class GraphConstructor:
             return G, data
 
         except Exception as e:
-            print(f"   ❌ Грешка при креирање similarity граф: {e}")
+            print(f"    Грешка при креирање similarity граф: {e}")
             return None, None
 
     def create_heterogeneous_graph(self):
         """FIXED: Креирај Heterogeneous Graph со подобра error handling"""
-        print("🌐 Креирање Heterogeneous Graph...")
+        print(" Креирање Heterogeneous Graph...")
 
         try:
             hetero_data = HeteroData()
@@ -540,9 +535,9 @@ class GraphConstructor:
                 hetero_data['event', 'located_at', 'venue'].edge_index = \
                     torch.tensor(event_venue_edges, dtype=torch.long).t().contiguous()
 
-            print(f"   ✅ Events: {hetero_data['event'].num_nodes}")
-            print(f"   ✅ Organizers: {hetero_data['organizer'].num_nodes}")
-            print(f"   ✅ Venues: {hetero_data['venue'].num_nodes}")
+            print(f"    Events: {hetero_data['event'].num_nodes}")
+            print(f"    Organizers: {hetero_data['organizer'].num_nodes}")
+            print(f"    Venues: {hetero_data['venue'].num_nodes}")
 
             self.graphs['heterogeneous'] = hetero_data
             self.stats['heterogeneous'] = {
@@ -556,12 +551,12 @@ class GraphConstructor:
             return hetero_data
 
         except Exception as e:
-            print(f"   ❌ Грешка при креирање heterogeneous граф: {e}")
+            print(f"    Грешка при креирање heterogeneous граф: {e}")
             return None
 
     def visualize_graphs(self):
         """FIXED: Подобрена визуализација со error handling"""
-        print("🎨 Визуализација на графови...")
+        print(" Визуализација на графови...")
 
         vis_dir = self.output_dir / "visualizations"
         vis_dir.mkdir(exist_ok=True)
@@ -578,10 +573,10 @@ class GraphConstructor:
             # 3. Graph Statistics
             self.visualize_graph_stats(vis_dir)
 
-            print(f"   ✅ Визуализации зачувани во: {vis_dir}")
+            print(f"    Визуализации зачувани во: {vis_dir}")
 
         except Exception as e:
-            print(f"   ⚠️ Проблем со визуализација: {e}")
+            print(f"    Проблем со визуализација: {e}")
 
     def visualize_similarity_graph(self, vis_dir):
         """FIXED: Подобрена визуализација на similarity граф"""
@@ -643,14 +638,14 @@ class GraphConstructor:
                 plt.scatter([], [], c=[color], label=cat[:15], s=100)
 
             plt.legend(title="Категории", bbox_to_anchor=(1.05, 1), loc='upper left')
-            plt.title("🔗 Event Similarity Graph", size=14, fontweight='bold')
+            plt.title(" Event Similarity Graph", size=14, fontweight='bold')
             plt.axis('off')
             plt.tight_layout()
             plt.savefig(vis_dir / 'similarity_graph.png', dpi=200, bbox_inches='tight')
             plt.close()  # FIXED: Затвори ја фигурата
 
         except Exception as e:
-            print(f"      ⚠️ Проблем со similarity visualization: {e}")
+            print(f"       Проблем со similarity visualization: {e}")
 
     def visualize_hetero_overview(self, vis_dir):
         """FIXED: Подобрена visualizacija на heterogeneous граф"""
@@ -668,7 +663,7 @@ class GraphConstructor:
             ]
 
             bars = axes[0, 0].bar(node_types, node_counts, color=['#1f77b4', '#ff7f0e', '#2ca02c'])
-            axes[0, 0].set_title('🌐 Node Types', fontweight='bold')
+            axes[0, 0].set_title(' Node Types', fontweight='bold')
             axes[0, 0].set_ylabel('Број nodes')
 
             for bar, count in zip(bars, node_counts):
@@ -683,7 +678,7 @@ class GraphConstructor:
             ]
 
             bars = axes[0, 1].bar(edge_types, edge_counts, color=['#d62728', '#9467bd'])
-            axes[0, 1].set_title('🔗 Edge Types', fontweight='bold')
+            axes[0, 1].set_title(' Edge Types', fontweight='bold')
             axes[0, 1].set_ylabel('Број edges')
             axes[0, 1].tick_params(axis='x', rotation=15)
 
@@ -702,7 +697,7 @@ class GraphConstructor:
             axes[1, 0].set_yticks(y_pos)
             axes[1, 0].set_yticklabels([org[:15] + '...' if len(str(org)) > 15 else str(org)
                                         for org in organizer_event_counts.index])
-            axes[1, 0].set_title('🏢 Top Organizers', fontweight='bold')
+            axes[1, 0].set_title(' Top Organizers', fontweight='bold')
             axes[1, 0].set_xlabel('Број настани')
             axes[1, 0].invert_yaxis()
 
@@ -717,7 +712,7 @@ class GraphConstructor:
             axes[1, 1].set_yticks(y_pos)
             axes[1, 1].set_yticklabels([venue[:15] + '...' if len(str(venue)) > 15 else str(venue)
                                         for venue in venue_event_counts.index])
-            axes[1, 1].set_title('🏛️ Top Venues', fontweight='bold')
+            axes[1, 1].set_title(' Top Venues', fontweight='bold')
             axes[1, 1].set_xlabel('Број настани')
             axes[1, 1].invert_yaxis()
 
@@ -726,7 +721,7 @@ class GraphConstructor:
             plt.close()  # FIXED: Затвори ја фигурата
 
         except Exception as e:
-            print(f"      ⚠️ Проблем со hetero visualization: {e}")
+            print(f"       Проблем со hetero visualization: {e}")
 
     def visualize_graph_stats(self, vis_dir):
         """FIXED: Подобрена статистичка визуализација"""
@@ -747,7 +742,7 @@ class GraphConstructor:
                     node_counts.append(self.stats[graph_name]['nodes'])
 
             bars = axes[0, 0].bar(graph_names, node_counts, alpha=0.8)
-            axes[0, 0].set_title('📊 Nodes по тип граф', fontweight='bold')
+            axes[0, 0].set_title(' Nodes по тип граф', fontweight='bold')
             axes[0, 0].set_ylabel('Број nodes')
             axes[0, 0].tick_params(axis='x', rotation=15)
 
@@ -766,7 +761,7 @@ class GraphConstructor:
                     edge_counts.append(self.stats[graph_name]['edges'])
 
             bars = axes[0, 1].bar(graph_names, edge_counts, alpha=0.8, color='orange')
-            axes[0, 1].set_title('🔗 Edges по тип граф', fontweight='bold')
+            axes[0, 1].set_title(' Edges по тип граф', fontweight='bold')
             axes[0, 1].set_ylabel('Број edges')
             axes[0, 1].tick_params(axis='x', rotation=15)
 
@@ -783,7 +778,7 @@ class GraphConstructor:
 
             bars = axes[1, 0].bar(feature_info.keys(), feature_info.values(),
                                   alpha=0.8, color='purple')
-            axes[1, 0].set_title('🎯 Feature Dimensions', fontweight='bold')
+            axes[1, 0].set_title(' Feature Dimensions', fontweight='bold')
             axes[1, 0].set_ylabel('Број features')
 
             for bar, count in zip(bars, feature_info.values()):
@@ -802,7 +797,7 @@ class GraphConstructor:
 
             bars = axes[1, 1].bar(quality_metrics.keys(), quality_metrics.values(),
                                   alpha=0.8, color='green')
-            axes[1, 1].set_title('📋 Data Quality', fontweight='bold')
+            axes[1, 1].set_title(' Data Quality', fontweight='bold')
             axes[1, 1].set_ylabel('Број записи')
             axes[1, 1].tick_params(axis='x', rotation=15)
 
@@ -816,11 +811,11 @@ class GraphConstructor:
             plt.close()  # FIXED: Затвори ја фигурата
 
         except Exception as e:
-            print(f"      ⚠️ Проблем со stats visualization: {e}")
+            print(f"       Проблем со stats visualization: {e}")
 
     def save_graphs(self):
         """FIXED: Подобрено зачувување со error handling"""
-        print("💾 Зачувување на графови...")
+        print(" Зачувување на графови...")
 
         try:
             # PyTorch Geometric формат
@@ -829,10 +824,10 @@ class GraphConstructor:
                 try:
                     output_file = self.output_dir / f"{name}_graph.pt"
                     torch.save(graph, output_file)
-                    print(f"   ✅ {name}_graph.pt")
+                    print(f"    {name}_graph.pt")
                     saved_count += 1
                 except Exception as e:
-                    print(f"   ❌ Проблем со {name}: {e}")
+                    print(f"    Проблем со {name}: {e}")
 
             # Метаподатоци
             metadata = {
@@ -851,32 +846,32 @@ class GraphConstructor:
             with open(self.output_dir / 'graph_metadata.json', 'w', encoding='utf-8') as f:
                 json.dump(metadata, f, indent=2, ensure_ascii=False)
 
-            print(f"   ✅ graph_metadata.json")
-            print(f"💾 {saved_count} графови зачувани во: {self.output_dir}")
+            print(f"    graph_metadata.json")
+            print(f" {saved_count} графови зачувани во: {self.output_dir}")
             return True
 
         except Exception as e:
-            print(f"❌ Проблем со зачувување: {e}")
+            print(f" Проблем со зачувување: {e}")
             return False
 
     def generate_summary(self):
         """FIXED: Подобрено резиме со error handling"""
         print("\n" + "=" * 60)
-        print("🔗 GRAPH CONSTRUCTION РЕЗУЛТАТИ")
+        print(" GRAPH CONSTRUCTION РЕЗУЛТАТИ")
         print("=" * 60)
-        print(f"📊 Dataset: {len(self.df):,} настани")
+        print(f" Dataset: {len(self.df):,} настани")
 
         if hasattr(self, 'tfidf_features') and hasattr(self, 'categorical_features') and hasattr(self,
                                                                                                  'numerical_features'):
             total_features = (self.tfidf_features.shape[1] +
                               self.categorical_features.shape[1] +
                               self.numerical_features.shape[1])
-            print(f"🎯 Feature dimensions: {total_features}")
+            print(f" Feature dimensions: {total_features}")
 
-        print(f"📈 Графови создадени: {len(self.graphs)}")
+        print(f" Графови создадени: {len(self.graphs)}")
 
         for name, stats in self.stats.items():
-            print(f"\n🔗 {name.title()} Graph:")
+            print(f"\n {name.title()} Graph:")
             if 'nodes' in stats:
                 print(f"   Nodes: {stats['nodes']:,}")
                 print(f"   Edges: {stats['edges']:,}")
@@ -887,27 +882,27 @@ class GraphConstructor:
                 for key, value in stats.items():
                     print(f"   {key}: {value}")
 
-        print(f"\n📁 Output папка: {self.output_dir}")
-        print("✅ Graph Construction завршен!")
+        print(f"\n Output папка: {self.output_dir}")
+        print(" Graph Construction завршен!")
 
     def run_full_construction(self):
         """FIXED: Главна функција со подобрен error handling"""
-        print("🔗 Graph Construction System")
+        print(" Graph Construction System")
         print("=" * 50)
 
         try:
             # 1. Load data
             if not self.load_data():
-                print("❌ Не можам да ги вчитам податоците!")
+                print(" Не можам да ги вчитам податоците!")
                 return False
 
             # 2. Prepare features
             if not self.prepare_features():
-                print("❌ Проблем со подготовка на features!")
+                print(" Проблем со подготовка на features!")
                 return False
 
             # 3. Create graphs
-            print("\n🔨 Креирање графови...")
+            print("\n Креирање графови...")
             graphs_created = 0
 
             # Event Similarity Graph
@@ -915,25 +910,25 @@ class GraphConstructor:
                 result = self.create_event_similarity_graph()
                 if result[0] is not None:
                     graphs_created += 1
-                    print("   ✅ Event Similarity Graph")
+                    print("    Event Similarity Graph")
                 else:
-                    print("   ⚠️ Event Similarity Graph не е креиран")
+                    print("    Event Similarity Graph не е креиран")
             except Exception as e:
-                print(f"   ❌ Similarity graph: {e}")
+                print(f"    Similarity graph: {e}")
 
             # Heterogeneous Graph
             try:
                 hetero_result = self.create_heterogeneous_graph()
                 if hetero_result is not None:
                     graphs_created += 1
-                    print("   ✅ Heterogeneous Graph")
+                    print("    Heterogeneous Graph")
                 else:
-                    print("   ⚠️ Heterogeneous Graph не е креиран")
+                    print("    Heterogeneous Graph не е креиран")
             except Exception as e:
-                print(f"   ❌ Heterogeneous graph: {e}")
+                print(f"    Heterogeneous graph: {e}")
 
             if graphs_created == 0:
-                print("❌ Ниеден граф не е креиран!")
+                print(" Ниеден граф не е креиран!")
                 return False
 
             # 4. Visualize
@@ -941,7 +936,7 @@ class GraphConstructor:
 
             # 5. Save
             if not self.save_graphs():
-                print("⚠️ Проблем со зачувување, но графовите се креирани")
+                print(" Проблем со зачувување, но графовите се креирани")
 
             # 6. Summary
             self.generate_summary()
@@ -949,7 +944,7 @@ class GraphConstructor:
             return True
 
         except Exception as e:
-            print(f"❌ Критична грешка: {e}")
+            print(f" Критична грешка: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -958,15 +953,15 @@ class GraphConstructor:
 def main():
     """FIXED: Главна функција со подобрена детекција"""
     try:
-        print("🔗 Graph Construction System - FIXED VERSION")
+        print(" Graph Construction System - FIXED VERSION")
         print("=" * 50)
 
         # Креирај конструктор (автоматски ќе ги детектира патиштата)
         constructor = GraphConstructor()
 
         if constructor.data_dir is None:
-            print("\n❌ Не можам да најдам cleaned_data!")
-            print("📋 Предлози:")
+            print("\n Не можам да најдам cleaned_data!")
+            print(" Предлози:")
             print("   1. Провери дали постои папката 'data_collection/NLP_data/cleaned_data/'")
             print("   2. Провери дали има CSV фајлови во таа папка")
             print("   3. Стартувај ја скриптата од root папката на проектот")
@@ -975,15 +970,15 @@ def main():
         success = constructor.run_full_construction()
 
         if success:
-            print("\n🎉 Graph Construction завршен успешно!")
-            print(f"\n📂 Провери ја папката '{constructor.output_dir}' за:")
+            print("\n Graph Construction завршен успешно!")
+            print(f"\n Провери ја папката '{constructor.output_dir}' за:")
             print("   - PyTorch Geometric graph фајлови (.pt)")
             print("   - Визуализации (PNG)")
             print("   - Метаподатоци (JSON)")
-            print("\n💡 Следен чекор: Користи ги .pt фајловите за GNN тренирање!")
+            print("\n Следен чекор: Користи ги .pt фајловите за GNN тренирање!")
         else:
-            print("\n❌ Проблем при graph construction")
-            print("📋 Можни решенија:")
+            print("\n Проблем при graph construction")
+            print(" Можни решенија:")
             print("   1. Провери ги патиштата до податоците")
             print("   2. Провери дали CSV фајловите се читливи")
             print("   3. Инсталирај ги потребните библиотеки")
@@ -991,7 +986,7 @@ def main():
         return success
 
     except Exception as e:
-        print(f"❌ Критична грешка: {e}")
+        print(f" Критична грешка: {e}")
         import traceback
         traceback.print_exc()
         return False

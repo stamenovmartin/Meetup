@@ -59,19 +59,19 @@ def create_graph_from_database(similarity_threshold=0.15):
         PyTorch Geometric Data object
     """
     print("=" * 80)
-    print("🔧 BUILDING GNN GRAPH FROM DATABASE")
+    print(" BUILDING GNN GRAPH FROM DATABASE")
     print("=" * 80)
 
     # Земи ги сите events
     events = Event.query.all()
-    print(f"\n📊 Found {len(events)} events in database")
+    print(f"\n Found {len(events)} events in database")
 
     if len(events) == 0:
-        print("❌ No events found!")
+        print(" No events found!")
         return None
 
     # Создади features од tags (TF-IDF)
-    print("\n🎯 Creating TF-IDF features from tags...")
+    print("\n Creating TF-IDF features from tags...")
 
     # Собери ги сите tags
     tag_texts = []
@@ -94,14 +94,14 @@ def create_graph_from_database(similarity_threshold=0.15):
     try:
         tfidf_matrix = vectorizer.fit_transform(tag_texts)
         features = torch.tensor(tfidf_matrix.toarray(), dtype=torch.float)
-        print(f"  ✅ TF-IDF features: {features.shape}")
+        print(f"   TF-IDF features: {features.shape}")
     except:
         # Fallback: random features
-        print("  ⚠️ TF-IDF failed, using random features")
+        print("   TF-IDF failed, using random features")
         features = torch.randn(len(events), 100)
 
     # Креирај edges врз основа на tag similarity
-    print(f"\n🔗 Creating edges (threshold={similarity_threshold})...")
+    print(f"\n Creating edges (threshold={similarity_threshold})...")
 
     similarity_matrix = cosine_similarity(features.numpy())
 
@@ -118,7 +118,7 @@ def create_graph_from_database(similarity_threshold=0.15):
                 edge_weights.append(sim)
 
     if len(edge_list) == 0:
-        print(f"  ⚠️ No edges with threshold={similarity_threshold}, lowering to 0.05")
+        print(f"   No edges with threshold={similarity_threshold}, lowering to 0.05")
         similarity_threshold = 0.05
         edge_list = []
         edge_weights = []
@@ -134,8 +134,8 @@ def create_graph_from_database(similarity_threshold=0.15):
 
     edge_index = torch.tensor(edge_list, dtype=torch.long).t().contiguous()
 
-    print(f"  ✅ Created {len(edge_list)} edges between {len(events)} nodes")
-    print(f"  📊 Avg degree: {len(edge_list) / len(events):.2f}")
+    print(f"   Created {len(edge_list)} edges between {len(events)} nodes")
+    print(f"   Avg degree: {len(edge_list) / len(events):.2f}")
 
     # Креирај Data object
     data = Data(
@@ -158,7 +158,7 @@ def train_graphsage(data, epochs=100):
     Returns:
         Trained embeddings tensor
     """
-    print(f"\n🚀 Training GraphSAGE model ({epochs} epochs)...")
+    print(f"\n Training GraphSAGE model ({epochs} epochs)...")
 
     model = SimplifiedGraphSAGE(
         in_channels=data.x.shape[1],
@@ -220,7 +220,7 @@ def train_graphsage(data, epochs=100):
     with torch.no_grad():
         embeddings = model(data.x, data.edge_index)
 
-    print(f"  ✅ Training complete! Embeddings shape: {embeddings.shape}")
+    print(f"   Training complete! Embeddings shape: {embeddings.shape}")
 
     return embeddings
 
@@ -234,7 +234,7 @@ def save_embeddings(embeddings, event_ids, output_path="graph_construction/graph
         event_ids: List на event IDs
         output_path: Патека за чување
     """
-    print(f"\n💾 Saving embeddings to {output_path}...")
+    print(f"\n Saving embeddings to {output_path}...")
 
     # Create event_id -> embedding mapping
     embedding_dict = {}
@@ -253,8 +253,8 @@ def save_embeddings(embeddings, event_ids, output_path="graph_construction/graph
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     torch.save(save_data, output_path)
 
-    print(f"  ✅ Saved embeddings for {len(event_ids)} events")
-    print(f"  📦 File size: {os.path.getsize(output_path) / 1024:.1f} KB")
+    print(f"   Saved embeddings for {len(event_ids)} events")
+    print(f"   File size: {os.path.getsize(output_path) / 1024:.1f} KB")
 
 
 def rebuild_gnn_pipeline(epochs=100):
@@ -267,7 +267,7 @@ def rebuild_gnn_pipeline(epochs=100):
         data, event_ids = create_graph_from_database()
 
         if data is None:
-            print("❌ Failed to build graph!")
+            print(" Failed to build graph!")
             return False
 
         # Step 2: Train GraphSAGE
@@ -277,15 +277,15 @@ def rebuild_gnn_pipeline(epochs=100):
         save_embeddings(embeddings, event_ids)
 
         print("\n" + "=" * 80)
-        print("✅ GNN REBUILD COMPLETE!")
+        print(" GNN REBUILD COMPLETE!")
         print("=" * 80)
-        print(f"\n📊 Summary:")
+        print(f"\n Summary:")
         print(f"  • Events processed: {len(event_ids)}")
         print(f"  • Embedding dimension: {embeddings.shape[1]}")
         print(f"  • Graph edges: {data.edge_index.shape[1]}")
         print(f"  • Avg node degree: {data.edge_index.shape[1] / len(event_ids):.2f}")
 
-        print(f"\n💡 Next steps:")
+        print(f"\n Next steps:")
         print(f"  1. Restart Flask backend (python main.py)")
         print(f"  2. Test препораки на frontend")
         print(f"  3. Run evaluation: python scripts/gnn_comprehensive_evaluation.py 3,4,5,6,7")

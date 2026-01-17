@@ -32,7 +32,7 @@ plt.rcParams['figure.figsize'] = (16, 10)
 def generate_alpha_comparison(user_ids, output_dir='docs/analytics/gnn_final'):
     """1. Alpha Comparison - Кој balance е најдобар?"""
 
-    print("📊 1. Generating Alpha Comparison...")
+    print(" 1. Generating Alpha Comparison...")
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -103,12 +103,12 @@ def generate_alpha_comparison(user_ids, output_dir='docs/analytics/gnn_final'):
     plt.savefig(f'{output_dir}/01_alpha_comparison.png', dpi=200, bbox_inches='tight')
     plt.close()
 
-    print(f"  ✅ Saved: 01_alpha_comparison.png")
+    print(f"   Saved: 01_alpha_comparison.png")
 
     # Врати best alpha
     best_idx = np.argmax(avg_precisions)
     best_alpha = alphas[best_idx]
-    print(f"  🏆 Best Alpha: {best_alpha} (T:{int(best_alpha*100)}%, G:{int((1-best_alpha)*100)}%)")
+    print(f"   Best Alpha: {best_alpha} (T:{int(best_alpha*100)}%, G:{int((1-best_alpha)*100)}%)")
 
     return best_alpha
 
@@ -116,7 +116,7 @@ def generate_alpha_comparison(user_ids, output_dir='docs/analytics/gnn_final'):
 def generate_gnn_impact_per_user(user_ids, output_dir='docs/analytics/gnn_final'):
     """2. GNN Impact per User - Visualization"""
 
-    print("📊 2. Generating GNN Impact per User...")
+    print(" 2. Generating GNN Impact per User...")
 
     recommender = get_recommender()
     original_alpha = recommender.alpha
@@ -196,16 +196,16 @@ def generate_gnn_impact_per_user(user_ids, output_dir='docs/analytics/gnn_final'
     plt.savefig(f'{output_dir}/02_gnn_impact_per_user.png', dpi=200, bbox_inches='tight')
     plt.close()
 
-    print(f"  ✅ Saved: 02_gnn_impact_per_user.png")
+    print(f"   Saved: 02_gnn_impact_per_user.png")
 
     avg_improvement = np.mean(improvements)
-    print(f"  📈 Average GNN Improvement: {avg_improvement:.1f}%")
+    print(f"   Average GNN Improvement: {avg_improvement:.1f}%")
 
 
 def generate_score_distribution(user_id=3, output_dir='docs/analytics/gnn_final'):
     """3. Score Distribution - Traditional vs GNN vs Hybrid"""
 
-    print("📊 3. Generating Score Distribution Comparison...")
+    print(" 3. Generating Score Distribution Comparison...")
 
     recommender = get_recommender()
     original_alpha = recommender.alpha
@@ -292,13 +292,13 @@ def generate_score_distribution(user_id=3, output_dir='docs/analytics/gnn_final'
     plt.savefig(f'{output_dir}/03_score_distribution.png', dpi=200, bbox_inches='tight')
     plt.close()
 
-    print(f"  ✅ Saved: 03_score_distribution.png")
+    print(f"   Saved: 03_score_distribution.png")
 
 
 def generate_comprehensive_summary(user_ids, output_dir='docs/analytics/gnn_final'):
     """4. Comprehensive Final Summary"""
 
-    print("📊 4. Generating Comprehensive Summary...")
+    print(" 4. Generating Comprehensive Summary...")
 
     recommender = get_recommender()
 
@@ -370,17 +370,17 @@ def generate_comprehensive_summary(user_ids, output_dir='docs/analytics/gnn_fina
 
     system_info = [
         ['Component', 'Value'],
-        ['─' * 40, '─' * 30],
+        ['-' * 40, '-' * 30],
         ['Total Events', '548'],
         ['Total Users', '32 (2 real + 30 synthetic)'],
         ['Total Interactions', '2,735'],
         ['Likes', '896 (32.8%)'],
         ['Dislikes', '733 (26.8%)'],
-        ['─' * 40, '─' * 30],
+        ['-' * 40, '-' * 30],
         ['GNN Embeddings', '548 × 59'],
         ['Graph Edges', '123,044'],
         ['Avg Node Degree', '224.53'],
-        ['─' * 40, '─' * 30],
+        ['-' * 40, '-' * 30],
         ['Current Alpha', f'{recommender.alpha}'],
         ['Traditional Weight', f'{int(recommender.alpha*100)}%'],
         ['GNN Weight', f'{int((1-recommender.alpha)*100)}%'],
@@ -396,17 +396,17 @@ def generate_comprehensive_summary(user_ids, output_dir='docs/analytics/gnn_fina
         table[(0, i)].set_facecolor('#4ECDC4')
         table[(0, i)].set_text_props(weight='bold', color='white')
 
-    axes[2].set_title('🎯 GNN System Configuration', fontsize=16, fontweight='bold', pad=20)
+    axes[2].set_title(' GNN System Configuration', fontsize=16, fontweight='bold', pad=20)
 
     # Plot 4: Final summary text
     axes[3].axis('off')
 
     summary_text = f"""
-    📊 GNN RECOMMENDATION SYSTEM - FINAL RESULTS
+     GNN RECOMMENDATION SYSTEM - FINAL RESULTS
 
-    ✅ GNN Status: FULLY FUNCTIONAL & ACTIVE
+     GNN Status: FULLY FUNCTIONAL & ACTIVE
 
-    🎯 Key Achievements:
+     Key Achievements:
 
     • GNN embeddings successfully trained (548 events, 59-dim)
     • Hybrid scoring: {int(recommender.alpha*100)}% Traditional + {int((1-recommender.alpha)*100)}% GNN
@@ -415,20 +415,20 @@ def generate_comprehensive_summary(user_ids, output_dir='docs/analytics/gnn_fina
     • HitRate@10: {avg_metrics['HitRate@10']:.3f} ({avg_metrics['HitRate@10']*100:.0f}%)
     • nDCG@10: {avg_metrics['nDCG@10']:.3f}
 
-    🚀 GNN Impact:
+     GNN Impact:
 
     • GNN successfully influences recommendation ranking
     • Balanced approach combines tag precision with GNN diversity
     • System works for all users (no cold-start issues)
 
-    📈 Technical Details:
+     Technical Details:
 
     • GraphSAGE architecture with 2 conv layers
     • Trained for 150 epochs with unsupervised learning
     • Cosine similarity for event comparisons
     • Dynamic alpha weighting for flexibility
 
-    🎉 Status: PRODUCTION READY
+     Status: PRODUCTION READY
     """
 
     axes[3].text(0.5, 0.5, summary_text, transform=axes[3].transAxes,
@@ -440,14 +440,14 @@ def generate_comprehensive_summary(user_ids, output_dir='docs/analytics/gnn_fina
     plt.savefig(f'{output_dir}/04_comprehensive_summary.png', dpi=200, bbox_inches='tight')
     plt.close()
 
-    print(f"  ✅ Saved: 04_comprehensive_summary.png")
+    print(f"   Saved: 04_comprehensive_summary.png")
 
 
 def generate_all_visualizations():
     """Main function - генерирај сè"""
 
     print("=" * 80)
-    print("🎨 ENHANCED GNN VISUALIZATIONS - GENERATION")
+    print(" ENHANCED GNN VISUALIZATIONS - GENERATION")
     print("=" * 80)
 
     app = create_app()
@@ -466,15 +466,15 @@ def generate_all_visualizations():
         generate_comprehensive_summary(user_ids, output_dir)
 
         print("\n" + "=" * 80)
-        print("✅ ALL VISUALIZATIONS GENERATED!")
+        print(" ALL VISUALIZATIONS GENERATED!")
         print("=" * 80)
-        print(f"\n📂 Location: {output_dir}/")
-        print(f"📊 Files:")
+        print(f"\n Location: {output_dir}/")
+        print(f" Files:")
         print(f"  • 01_alpha_comparison.png")
         print(f"  • 02_gnn_impact_per_user.png")
         print(f"  • 03_score_distribution.png")
         print(f"  • 04_comprehensive_summary.png")
-        print(f"\n🏆 Recommended Alpha: {best_alpha}")
+        print(f"\n Recommended Alpha: {best_alpha}")
         print("=" * 80)
 
 

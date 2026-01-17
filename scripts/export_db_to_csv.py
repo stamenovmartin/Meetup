@@ -31,15 +31,15 @@ def export_events_to_csv(output_path=None):
 
     with app.app_context():
         print("=" * 80)
-        print("📤 EXPORTING DATABASE EVENTS TO CSV")
+        print(" EXPORTING DATABASE EVENTS TO CSV")
         print("=" * 80)
 
         # Земи ги сите events од database
         events = Event.query.all()
-        print(f"\n📊 Found {len(events)} events in database")
+        print(f"\n Found {len(events)} events in database")
 
         if len(events) == 0:
-            print("❌ No events to export!")
+            print(" No events to export!")
             return 0
 
         # Конвертирај во DataFrame
@@ -77,11 +77,11 @@ def export_events_to_csv(output_path=None):
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         df.to_csv(output_path, index=False, encoding='utf-8-sig')
 
-        print(f"\n✅ Exported {len(events)} events to: {output_path}")
-        print(f"📋 Columns: {', '.join(df.columns)}")
-        print(f"📦 File size: {os.path.getsize(output_path) / 1024:.1f} KB")
+        print(f"\n Exported {len(events)} events to: {output_path}")
+        print(f" Columns: {', '.join(df.columns)}")
+        print(f" File size: {os.path.getsize(output_path) / 1024:.1f} KB")
 
-        print("\n📊 Dataset Summary:")
+        print("\n Dataset Summary:")
         print(f"  • Events with title: {len(df[df['title'].str.len() > 0])}")
         print(f"  • Events with category: {len(df[df['category'].notna() & (df['category'] != '')])}")
         print(f"  • Events with tags: {len(df[df['tags'].notna() & (df['tags'] != '')])}")
@@ -90,7 +90,7 @@ def export_events_to_csv(output_path=None):
 
         # Top categories
         if len(df[df['category'].notna()]) > 0:
-            print(f"\n🏷️ Top 5 Categories:")
+            print(f"\n Top 5 Categories:")
             top_categories = df['category'].value_counts().head(5)
             for cat, count in top_categories.items():
                 print(f"  • {cat}: {count}")
@@ -106,14 +106,14 @@ def export_events_to_csv(output_path=None):
             if all_tags:
                 from collections import Counter
                 tag_counts = Counter(all_tags)
-                print(f"\n🏷️ Top 10 Tags:")
+                print(f"\n Top 10 Tags:")
                 for tag, count in tag_counts.most_common(10):
                     print(f"  • {tag}: {count}")
 
         print("\n" + "=" * 80)
-        print("✅ EXPORT COMPLETE!")
+        print(" EXPORT COMPLETE!")
         print("=" * 80)
-        print(f"\n💡 Next step: Run graph construction with this CSV file:")
+        print(f"\n Next step: Run graph construction with this CSV file:")
         print(f"   python graph_construction/graph_construction.py")
 
         return len(events)

@@ -1,116 +1,33 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Calendar, MapPin, Users, Heart, Star, Search, Bell, User, Clock, Tag, ChevronLeft, ChevronRight, UserPlus, CheckCircle, MessageCircle, Settings, LogOut, ThumbsDown, X } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  Calendar, MapPin, Users, Heart, Search, User, Clock, Bell,
+  CheckCircle, LogOut, Filter, LayoutGrid, ChevronLeft, ChevronRight,
+  Activity, Sparkles, ArrowRight, X, UserPlus, Loader2
+} from 'lucide-react';
+import type { Event, Venue, User as AppUser, Friend, DateInfo, LoginForm, VenuesMap } from './types';
 
-const BACKEND_BASE = "http://127.0.0.1:5000";
+const BACKEND_BASE = import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:5000";
 
-// Типови и интерфејси
-interface Event {
-  id?: number;
-  event_id?: number;
-  title: string;
-  description?: string;
-  starts_at: string;
-  venue_id?: number;
-  tags?: string[];
-  my_rating?: number;
-  score_pct?: number;
-  liked_at?: string;
-  attended_at?: string;
-}
-
-interface Venue {
-  id: number;
-  name: string;
-  city?: string;
-}
-
-interface User {
-  id: number;
-  name: string;
-  email: string;
-  city?: string;
-}
-
-interface Friend {
-  id: number;
-  name: string;
-  city?: string;
-  friendship_status?: string;
-}
-
-interface DateInfo {
-  full: string;
-  day: number;
-  month: string;
-  time: string;
-  relative: string;
-  dayName: string;
-  isPast: boolean;
-  isToday: boolean;
-  isTomorrow: boolean;
-}
-
-interface Filters {
-  start: string;
-  end: string;
-  city: string;
-  tags: string;
-  search: string;
-  sortBy?: string;
-}
-
-interface LoginForm {
-  email: string;
-  password: string;
-}
-
-interface VenuesMap {
-  [key: number]: Venue;
-}
-
-interface EventsByDate {
-  [key: number]: Event[];
-}
-
-// Local Storage helpers
+// --- HELPERS ---
 const getStoredTheme = (): boolean => {
-  try {
-    const stored = window.localStorage.getItem('darkMode');
-    return stored ? JSON.parse(stored) : false;
-  } catch {
-    return false;
-  }
+  try { return JSON.parse(window.localStorage.getItem('darkMode') || 'false'); } catch { return false; }
 };
 
 const setStoredTheme = (isDark: boolean): void => {
-  try {
-    window.localStorage.setItem('darkMode', JSON.stringify(isDark));
-  } catch {
-    // Ignore storage errors
-  }
+  try { window.localStorage.setItem('darkMode', JSON.stringify(isDark)); } catch {}
 };
 
 const getStoredToken = (): string | null => {
-  try {
-    return window.localStorage.getItem('access_token');
-  } catch {
-    return null;
-  }
+  try { return window.localStorage.getItem('access_token'); } catch { return null; }
 };
 
 const setStoredToken = (token: string | null): void => {
   try {
-    if (token) {
-      window.localStorage.setItem('access_token', token);
-    } else {
-      window.localStorage.removeItem('access_token');
-    }
-  } catch {
-    // Ignore storage errors
-  }
+    if (token) window.localStorage.setItem('access_token', token);
+    else window.localStorage.removeItem('access_token');
+  } catch {}
 };
 
-// Helper функции за датуми
 const formatEventDate = (dateStr: string): DateInfo => {
   try {
     const date = new Date(dateStr);
@@ -119,441 +36,324 @@ const formatEventDate = (dateStr: string): DateInfo => {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     const dayNames = ['Недела', 'Понеделник', 'Вторник', 'Среда', 'Четврток', 'Петок', 'Сабота'];
-    const monthNames = ['јануари', 'февруари', 'март', 'април', 'мај', 'јуни', 'јули', 'август', 'септември', 'октомври', 'ноември', 'декември'];
-
-    const dayName = dayNames[date.getDay()];
-    const day = date.getDate();
-    const month = monthNames[date.getMonth()];
-    const year = date.getFullYear();
-    const time = date.toLocaleTimeString('mk-MK', { hour: '2-digit', minute: '2-digit' });
-
-    let relativeDay = '';
-    if (diffDays === 0) relativeDay = 'Денес';
-    else if (diffDays === 1) relativeDay = 'Утре';
-    else if (diffDays === -1) relativeDay = 'Вчера';
-    else if (diffDays > 1 && diffDays <= 7) relativeDay = `За ${diffDays} дена`;
-    else if (diffDays < -1 && diffDays >= -7) relativeDay = `Пред ${Math.abs(diffDays)} дена`;
+    const monthNames = ['јан', 'фев', 'мар', 'апр', 'мај', 'јун', 'јул', 'авг', 'сеп', 'окт', 'ное', 'дек'];
 
     return {
-      full: `${dayName}, ${day} ${month} ${year}`,
-      day: day,
-      month: month.substring(0, 3),
-      time: time,
-      relative: relativeDay,
-      dayName: dayName.substring(0, 3),
+      full: `${dayNames[date.getDay()]}, ${date.getDate()} ${monthNames[date.getMonth()]}`,
+      day: date.getDate(),
+      month: monthNames[date.getMonth()],
+      time: date.toLocaleTimeString('mk-MK', { hour: '2-digit', minute: '2-digit' }),
+      relative: diffDays === 0 ? 'Денес' : diffDays === 1 ? 'Утре' : diffDays < 0 ? `Пред ${Math.abs(diffDays)} дена` : `За ${diffDays} дена`,
+      dayName: dayNames[date.getDay()].substring(0, 3),
       isPast: diffDays < 0,
       isToday: diffDays === 0,
       isTomorrow: diffDays === 1
     };
-  } catch (error) {
-    console.error('Error formatting date:', error);
-    return {
-      full: 'Невалиден датум',
-      day: 0,
-      month: '?',
-      time: '?',
-      relative: '',
-      dayName: '?',
-      isPast: false,
-      isToday: false,
-      isTomorrow: false
-    };
+  } catch {
+    return { full: '?', day: 0, month: '?', time: '?', relative: '', dayName: '?', isPast: false, isToday: false, isTomorrow: false };
   }
 };
 
-// Event Card компонента
-interface EventCardProps {
-  event: Event;
-  venue?: Venue;
-  onToggleFavorite?: (eventId: number) => Promise<void>;
-  onToggleAttended?: (eventId: number) => Promise<void>;
-  onDislike?: (eventId: number) => Promise<void>;
-  showRecommendation?: boolean;
-  showActions?: boolean;
-}
+// --- COMPONENTS ---
 
-const EventCard: React.FC<EventCardProps> = ({
-  event,
-  venue,
-  onToggleFavorite,
-  onToggleAttended,
-  onDislike,
-  showRecommendation = false,
-  showActions = true
-}) => {
-  const [isLiked, setIsLiked] = useState<boolean>(false);
-  const [isDisliked, setIsDisliked] = useState<boolean>(false);
-  const [hasAttended, setHasAttended] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(false);
-
+// Simple Toast Notification
+const Toast: React.FC<{ message: string; type: 'success' | 'error'; onClose: () => void }> = ({ message, type, onClose }) => {
   useEffect(() => {
-    if (event && typeof event.my_rating !== 'undefined') {
-      setIsLiked(event.my_rating === 1);
-      setIsDisliked(event.my_rating === -1);
-      setHasAttended(!!event.my_rating);
-    }
-  }, [event]);
-
-  const dateInfo = formatEventDate(event?.starts_at || new Date().toISOString());
-  const tags = Array.isArray(event?.tags) ? event.tags.filter((t: string) => t && t.trim()) : [];
-
-  const handleToggleFavorite = async (): Promise<void> => {
-    if (!onToggleFavorite || !event) return;
-
-    setLoading(true);
-    try {
-      const eventId = event.id || event.event_id;
-      if (eventId) {
-        await onToggleFavorite(eventId);
-        setIsLiked(!isLiked);
-      }
-    } catch (error) {
-      console.error('Error toggling favorite:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleToggleAttended = async (): Promise<void> => {
-    if (!onToggleAttended || !event) return;
-
-    setLoading(true);
-    try {
-      const eventId = event.id || event.event_id;
-      if (eventId) {
-        await onToggleAttended(eventId);
-        setHasAttended(!hasAttended);
-      }
-    } catch (error) {
-      console.error('Error toggling attended:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDislike = async (): Promise<void> => {
-    if (!onDislike || !event) return;
-
-    setLoading(true);
-    try {
-      const eventId = event.id || event.event_id;
-      if (eventId) {
-        await onDislike(eventId);
-        setIsDisliked(!isDisliked);
-        if (!isDisliked) {
-          setIsLiked(false); // Clear like when disliking
-        }
-      }
-    } catch (error) {
-      console.error('Error disliking event:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (!event) return null;
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 dark:border-gray-700">
-      {/* Header со date badge */}
-      <div className="relative p-6 pb-4">
-        <div className={`absolute top-4 right-4 rounded-lg px-3 py-2 text-sm font-medium ${
-          dateInfo.isPast ? 'bg-gray-400' : 
-          dateInfo.isToday ? 'bg-green-500' : 
-          dateInfo.isTomorrow ? 'bg-orange-500' : 'bg-indigo-500'
-        } text-white`}>
-          <div className="text-center">
-            <div className="text-lg font-bold">{dateInfo.day}</div>
-            <div className="text-xs uppercase">{dateInfo.month}</div>
-          </div>
-        </div>
-
-        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 pr-20">
-          {event.title || 'Без наслов'}
-        </h3>
-
-        {/* Датум и време подетално */}
-        <div className="mb-3">
-          <div className="flex items-center text-gray-600 dark:text-gray-400 mb-1">
-            <Calendar className="w-4 h-4 mr-2" />
-            <span className="text-sm font-medium">{dateInfo.full}</span>
-          </div>
-          <div className="flex items-center text-gray-500 dark:text-gray-500 text-sm">
-            <Clock className="w-3 h-3 mr-2" />
-            <span>{dateInfo.time}</span>
-            {dateInfo.relative && (
-              <>
-                <span className="mx-2">•</span>
-                <span className={`font-medium ${
-                  dateInfo.isToday ? 'text-green-600' : 
-                  dateInfo.isTomorrow ? 'text-orange-600' : 
-                  dateInfo.isPast ? 'text-gray-500' : 'text-indigo-600'
-                }`}>
-                  {dateInfo.relative}
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-
-        {showRecommendation && event.score_pct && (
-          <div className="mb-3">
-            <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400 mb-1">
-              <span>Препорака за тебе</span>
-              <span className="font-semibold text-indigo-600">{event.score_pct}%</span>
-            </div>
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-              <div
-                className="h-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 transition-all duration-500"
-                style={{ width: `${event.score_pct}%` }}
-              ></div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Event details */}
-      <div className="px-6 pb-4">
-        {venue && (
-          <div className="flex items-center text-gray-600 dark:text-gray-400 mb-3">
-            <MapPin className="w-4 h-4 mr-2" />
-            <span className="text-sm">{venue.name}</span>
-            {venue.city && <span className="text-sm ml-1 text-gray-500">• {venue.city}</span>}
-          </div>
-        )}
-
-        {event.description && (
-          <p className="text-gray-700 dark:text-gray-300 text-sm mb-4 line-clamp-3">
-            {event.description.length > 120 ?
-              event.description.substring(0, 120) + '...' :
-              event.description
-            }
-          </p>
-        )}
-
-        {/* Tags */}
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-4">
-            {tags.slice(0, 3).map((tag: string, i: number) => (
-              <span key={i} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
-                <Tag className="w-3 h-3 mr-1" />
-                {tag}
-              </span>
-            ))}
-            {tags.length > 3 && (
-              <span className="text-xs text-gray-500">+{tags.length - 3} повеќе</span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Action buttons */}
-      {showActions && (
-        <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
-          <div className="flex items-center justify-between">
-            <div className="flex space-x-2">
-              <button
-                onClick={handleToggleFavorite}
-                disabled={loading}
-                className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                  isLiked
-                    ? 'bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-300'
-                    : 'bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600 dark:bg-gray-700 dark:text-gray-400'
-                } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <Heart className={`w-4 h-4 mr-1 ${isLiked ? 'fill-current' : ''}`} />
-                Омилен
-              </button>
-
-              <button
-                onClick={handleDislike}
-                disabled={loading}
-                className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                  isDisliked
-                    ? 'bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-300'
-                    : 'bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600 dark:bg-gray-700 dark:text-gray-400'
-                } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <ThumbsDown className={`w-4 h-4 mr-1 ${isDisliked ? 'fill-current' : ''}`} />
-                Не ми се допаѓа
-              </button>
-
-              <button
-                onClick={handleToggleAttended}
-                disabled={loading}
-                className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                  hasAttended
-                    ? 'bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-300'
-                    : 'bg-gray-100 text-gray-600 hover:bg-green-50 hover:text-green-600 dark:bg-gray-700 dark:text-gray-400'
-                } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <CheckCircle className={`w-4 h-4 mr-1 ${hasAttended ? 'fill-current' : ''}`} />
-                Присуствувал
-              </button>
-            </div>
-
-            <button className="flex items-center px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium transition-all">
-              <Users className="w-4 h-4 mr-1" />
-              Детали
-            </button>
-          </div>
-        </div>
+    <div
+      className={`fixed bottom-6 right-6 z-50 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 animate-fade-in ${
+        type === 'success'
+          ? 'bg-emerald-500 text-white'
+          : 'bg-rose-500 text-white'
+      }`}
+    >
+      {type === 'success' ? (
+        <CheckCircle className="w-5 h-5" />
+      ) : (
+        <X className="w-5 h-5" />
       )}
+      <span className="font-bold">{message}</span>
+      <button onClick={onClose} className="ml-2 hover:opacity-70">
+        <X className="w-4 h-4" />
+      </button>
     </div>
   );
 };
 
-// Calendar View компонента
-interface CalendarViewProps {
-  events: Event[];
-  venues: VenuesMap;
-}
+const GlassCard: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
+  <div className={`bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl shadow-sm border border-slate-200/50 dark:border-slate-700/50 transition-all duration-500 hover:shadow-xl hover:shadow-indigo-500/10 ${className}`}>
+    {children}
+  </div>
+);
 
-const CalendarView: React.FC<CalendarViewProps> = ({ events, venues }) => {
-  const [currentDate, setCurrentDate] = useState<Date>(new Date());
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+const EventCard: React.FC<{
+  event: Event;
+  venue?: Venue;
+  onToggleFavorite?: (eventId: number) => Promise<void>;
+  onToggleAttended?: (eventId: number) => Promise<void>;
+  showRecommendation?: boolean;
+}> = ({ event, venue, onToggleFavorite, onToggleAttended, showRecommendation }) => {
+  const [likeLoading, setLikeLoading] = useState(false);
+  const [attendLoading, setAttendLoading] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const dateInfo = formatEventDate(event.starts_at);
+  const tags = event.tags || [];
+
+  const handleLike = async () => {
+    const id = event.id || event.event_id;
+    if (!id || likeLoading || !onToggleFavorite) return;
+    setLikeLoading(true);
+    try {
+      await onToggleFavorite(id);
+      setToast({ message: isLiked ? '❤️ Отстрането од омилени' : '✅ Додадено во омилени', type: 'success' });
+    } catch (err) {
+      setToast({ message: '❌ Грешка при зачувување', type: 'error' });
+      console.error(err);
+    } finally {
+      setLikeLoading(false);
+    }
+  };
+
+  const handleAttend = async () => {
+    const id = event.id || event.event_id;
+    if (!id || attendLoading || !onToggleAttended) return;
+    setAttendLoading(true);
+    try {
+      await onToggleAttended(id);
+      setToast({ message: '✅ Статусот е ажуриран', type: 'success' });
+    } catch (err) {
+      setToast({ message: '❌ Грешка при ажурирање', type: 'error' });
+      console.error(err);
+    } finally {
+      setAttendLoading(false);
+    }
+  };
+
+  const isLiked = event.my_rating === 1;
+
+  const isLoading = likeLoading || attendLoading;
+
+  return (
+    <>
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <GlassCard className="group overflow-hidden flex flex-col h-full border-b-4 border-b-transparent hover:border-b-indigo-500 relative">
+        {/* Loading Overlay */}
+        {isLoading && (
+          <div className="absolute inset-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-3xl">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="w-12 h-12 text-indigo-600 dark:text-indigo-400 animate-spin" />
+              <span className="text-sm font-bold text-slate-600 dark:text-slate-300 animate-pulse">
+                Се зачувува...
+              </span>
+            </div>
+          </div>
+        )}
+        <div className="relative h-52 overflow-hidden">
+        <img
+          src={`https://picsum.photos/seed/${event.id || event.event_id}/800/600`}
+          alt={event.title}
+          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent opacity-60"></div>
+
+        <div className="absolute top-4 left-4">
+          <div className="bg-white/90 backdrop-blur-md dark:bg-slate-800/90 rounded-2xl p-2 px-3 shadow-2xl text-center min-w-[50px]">
+            <span className="block text-xl font-black text-indigo-600 dark:text-indigo-400 leading-none">{dateInfo.day}</span>
+            <span className="block text-[10px] uppercase font-black tracking-tighter text-slate-500">{dateInfo.month}</span>
+          </div>
+        </div>
+
+        {showRecommendation && typeof event.gnn_score === 'number' && (
+          <div className="absolute top-4 right-4 bg-indigo-600 text-white px-3 py-1.5 rounded-full text-[10px] font-black shadow-lg flex items-center gap-1.5 animate-pulse">
+            <Sparkles className="w-3 h-3" />
+            {event.gnn_score.toFixed(1)}% GNN
+          </div>
+        )}
+      </div>
+
+      <div className="p-6 flex-1 flex flex-col">
+        <div className="flex-1">
+          <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-3 line-clamp-2 group-hover:text-indigo-600 transition-colors">
+            {event.title}
+          </h3>
+
+          <div className="space-y-2.5 mb-5">
+            <div className="flex items-center text-slate-500 dark:text-slate-400 text-sm font-medium">
+              <MapPin className="w-4 h-4 mr-2 text-indigo-500" />
+              <span className="truncate">{venue?.name || 'Локација'}</span>
+            </div>
+            <div className="flex items-center text-slate-500 dark:text-slate-400 text-sm font-medium">
+              <Clock className="w-4 h-4 mr-2 text-indigo-500" />
+              <span>{dateInfo.time} • {dateInfo.relative}</span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 mb-6">
+            {tags.slice(0, 3).map((tag, i) => (
+              <span key={i} className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg text-[10px] font-black uppercase tracking-widest border border-slate-200/50 dark:border-slate-700/50">
+                {tag}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="pt-5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="flex gap-2">
+            <button
+              onClick={handleLike}
+              disabled={likeLoading}
+              className={`relative p-2.5 rounded-2xl transition-all active:scale-95 ${
+                isLiked
+                  ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30'
+                  : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400'
+              } ${likeLoading ? 'cursor-wait' : ''}`}
+            >
+              {likeLoading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Heart className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} />
+              )}
+            </button>
+            <button
+              onClick={handleAttend}
+              disabled={attendLoading}
+              className={`relative p-2.5 rounded-2xl hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-400 hover:text-emerald-500 transition-all active:scale-95 ${
+                attendLoading ? 'cursor-wait' : ''
+              }`}
+            >
+              {attendLoading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <CheckCircle className="w-5 h-5" />
+              )}
+            </button>
+          </div>
+          <button className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-black text-xs uppercase tracking-widest hover:gap-2.5 transition-all active:scale-95">
+            Детали <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </GlassCard>
+    </>
+  );
+};
+
+// Calendar View Component
+const CalendarView: React.FC<{ events: Event[]; venues: VenuesMap }> = ({ events, venues }) => {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<number | null>(null);
 
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
   const startingDayOfWeek = firstDay === 0 ? 6 : firstDay - 1;
 
-  const eventsByDate = useMemo((): EventsByDate => {
-    const grouped: EventsByDate = {};
-    if (Array.isArray(events)) {
-      events.forEach((event: Event) => {
-        if (event.starts_at) {
-          const eventDate = new Date(event.starts_at);
-          if (eventDate.getMonth() === currentDate.getMonth() &&
-              eventDate.getFullYear() === currentDate.getFullYear()) {
-            const date = eventDate.getDate();
-            if (!grouped[date]) grouped[date] = [];
-            grouped[date].push(event);
-          }
-        }
-      });
-    }
+  const eventsByDate = useMemo(() => {
+    const grouped: { [key: number]: Event[] } = {};
+    events.forEach(event => {
+      const eventDate = new Date(event.starts_at);
+      if (eventDate.getMonth() === currentDate.getMonth() && eventDate.getFullYear() === currentDate.getFullYear()) {
+        const date = eventDate.getDate();
+        if (!grouped[date]) grouped[date] = [];
+        grouped[date].push(event);
+      }
+    });
     return grouped;
   }, [events, currentDate]);
 
   const monthNames = ['Јануари', 'Февруари', 'Март', 'Април', 'Мај', 'Јуни', 'Јули', 'Август', 'Септември', 'Октомври', 'Ноември', 'Декември'];
   const dayNames = ['Пон', 'Вто', 'Сре', 'Чет', 'Пет', 'Саб', 'Нед'];
 
-  const navigateMonth = (direction: number): void => {
-    const newDate = new Date(currentDate);
-    newDate.setMonth(currentDate.getMonth() + direction);
-    setCurrentDate(newDate);
-  };
-
-  const goToToday = (): void => {
-    setCurrentDate(new Date());
-  };
-
-  const getDayEvents = (day: number): Event[] => eventsByDate[day] || [];
-
   return (
     <div className="space-y-6">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+      <GlassCard className="p-6">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
             {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
           </h2>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
             <button
-              onClick={goToToday}
-              className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
+              onClick={() => setCurrentDate(new Date())}
+              className="px-4 py-2 text-sm font-black bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 rounded-xl hover:bg-indigo-100 transition"
             >
               Денес
             </button>
             <button
-              onClick={() => navigateMonth(-1)}
-              className="p-2 text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))}
+              className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
             <button
-              onClick={() => navigateMonth(1)}
-              className="p-2 text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))}
+              className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition"
             >
               <ChevronRight className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-7 gap-1">
-          {dayNames.map((day: string) => (
-            <div key={day} className="p-3 text-center text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 rounded-lg">
+        <div className="grid grid-cols-7 gap-2">
+          {dayNames.map(day => (
+            <div key={day} className="p-3 text-center text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
               {day}
             </div>
           ))}
 
-          {Array.from({ length: startingDayOfWeek }, (_, i: number) => (
-            <div key={`empty-${i}`} className="p-1 h-24"></div>
+          {Array.from({ length: startingDayOfWeek }).map((_, i) => (
+            <div key={`empty-${i}`} className="p-1 h-20"></div>
           ))}
 
-          {Array.from({ length: daysInMonth }, (_, i: number) => {
+          {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1;
-            const dayEvents = getDayEvents(day);
+            const dayEvents = eventsByDate[day] || [];
             const isToday = new Date().toDateString() === new Date(currentDate.getFullYear(), currentDate.getMonth(), day).toDateString();
 
             return (
-              <div key={day} className="p-1 h-24">
-                <div className={`h-full p-2 rounded-lg border transition-all cursor-pointer ${
-                  dayEvents.length > 0 
-                    ? 'bg-indigo-50 border-indigo-200 hover:bg-indigo-100 dark:bg-indigo-900 dark:border-indigo-700' 
-                    : 'border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800'
-                } ${isToday ? 'ring-2 ring-indigo-500' : ''}`}>
-                  <div className={`text-sm font-medium mb-1 ${
-                    isToday ? 'text-indigo-600' : 'text-gray-700 dark:text-gray-300'
-                  }`}>
-                    {day}
-                  </div>
-
-                  <div className="space-y-1">
-                    {dayEvents.slice(0, 2).map((event: Event, idx: number) => (
-                      <div
-                        key={`${event.id || event.event_id || idx}-${idx}`}
-                        onClick={() => setSelectedEvent(event)}
-                        className="text-xs bg-indigo-200 text-indigo-800 px-2 py-1 rounded truncate hover:bg-indigo-300 transition-colors"
-                        title={event.title || 'Настан'}
-                      >
-                        {(event.title || 'Настан').length > 15 ? (event.title || 'Настан').substring(0, 15) + '...' : (event.title || 'Настан')}
-                      </div>
-                    ))}
-                    {dayEvents.length > 2 && (
-                      <div className="text-xs text-indigo-600 font-medium">
-                        +{dayEvents.length - 2} повеќе
-                      </div>
-                    )}
-                  </div>
+              <div
+                key={day}
+                onClick={() => setSelectedDate(day)}
+                className={`p-2 h-20 rounded-xl border-2 cursor-pointer transition-all ${
+                  dayEvents.length > 0
+                    ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800 hover:border-indigo-400'
+                    : 'border-slate-200/50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900'
+                } ${isToday ? 'ring-2 ring-indigo-500' : ''} ${selectedDate === day ? 'ring-2 ring-indigo-600 bg-indigo-100 dark:bg-indigo-900/40' : ''}`}
+              >
+                <div className={`text-sm font-bold mb-1 ${isToday ? 'text-indigo-600' : 'text-slate-700 dark:text-slate-300'}`}>
+                  {day}
                 </div>
+                {dayEvents.length > 0 && (
+                  <div className="text-[10px] font-black text-indigo-600 dark:text-indigo-400">
+                    {dayEvents.length} настан{dayEvents.length > 1 ? 'и' : ''}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
-      </div>
+      </GlassCard>
 
-      {selectedEvent && selectedEvent.starts_at && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-          <div className="flex items-start justify-between mb-4">
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-              Настани за {formatEventDate(selectedEvent.starts_at).full}
+      {selectedDate && eventsByDate[selectedDate] && (
+        <GlassCard className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+              Настани за {selectedDate} {monthNames[currentDate.getMonth()]}
             </h3>
-            <button
-              onClick={() => setSelectedEvent(null)}
-              className="text-gray-400 hover:text-gray-600 transition-colors text-lg"
-            >
-              ✕
+            <button onClick={() => setSelectedDate(null)} className="text-slate-400 hover:text-slate-600 transition">
+              <X className="w-5 h-5" />
             </button>
           </div>
-
           <div className="space-y-4">
-            {getDayEvents(new Date(selectedEvent.starts_at).getDate()).map((event: Event) => (
-              <div key={event.id || event.event_id || Math.random()} className="border-l-4 border-indigo-500 pl-4 py-2">
-                <h4 className="font-semibold text-gray-900 dark:text-white">{event.title || 'Настан'}</h4>
-                <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mt-1">
+            {eventsByDate[selectedDate].map(event => (
+              <div key={event.id || event.event_id} className="border-l-4 border-indigo-500 pl-4 py-2">
+                <h4 className="font-bold text-slate-900 dark:text-white">{event.title}</h4>
+                <div className="flex items-center text-sm text-slate-500 dark:text-slate-400 mt-1">
                   <Clock className="w-4 h-4 mr-2" />
-                  <span>{formatEventDate(event.starts_at || '').time}</span>
-                  {venues && event.venue_id && venues[event.venue_id] && (
+                  <span>{formatEventDate(event.starts_at).time}</span>
+                  {event.venue_id && venues[event.venue_id] && (
                     <>
                       <span className="mx-2">•</span>
                       <MapPin className="w-4 h-4 mr-1" />
@@ -561,15 +361,154 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, venues }) => {
                     </>
                   )}
                 </div>
-                {event.description && (
-                  <p className="text-sm text-gray-700 dark:text-gray-300 mt-2">
-                    {event.description.length > 100 ?
-                      event.description.substring(0, 100) + '...' :
-                      event.description
-                    }
-                  </p>
-                )}
               </div>
+            ))}
+          </div>
+        </GlassCard>
+      )}
+    </div>
+  );
+};
+
+// Search & Filter Component
+const SearchComponent: React.FC<{
+  onSearch: (query: string, filters: any) => void;
+}> = ({ onSearch }) => {
+  const [query, setQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState<any>({});
+
+  const handleSearch = () => {
+    onSearch(query, filters);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="relative group">
+        <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-6 h-6 text-slate-400 group-focus-within:text-indigo-600 transition" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+          placeholder="Кој е твојот следен план?"
+          className="w-full bg-white dark:bg-slate-900 border-2 border-slate-200/50 dark:border-slate-800/50 rounded-[2rem] py-6 pl-16 pr-6 focus:outline-none focus:border-indigo-500 transition-all shadow-xl font-bold text-lg"
+        />
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className="absolute right-4 top-1/2 -translate-y-1/2 bg-indigo-600 text-white p-3.5 rounded-2xl hover:scale-105 transition"
+        >
+          <Filter className="w-5 h-5" />
+        </button>
+      </div>
+
+      {showFilters && (
+        <GlassCard className="p-6 animate-in slide-in-from-top-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Од датум</label>
+              <input
+                type="date"
+                value={filters.start || ''}
+                onChange={(e) => setFilters({ ...filters, start: e.target.value })}
+                className="w-full p-3 border-2 border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-indigo-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">До датум</label>
+              <input
+                type="date"
+                value={filters.end || ''}
+                onChange={(e) => setFilters({ ...filters, end: e.target.value })}
+                className="w-full p-3 border-2 border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-indigo-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Град</label>
+              <input
+                type="text"
+                value={filters.city || ''}
+                onChange={(e) => setFilters({ ...filters, city: e.target.value })}
+                placeholder="Скопје, Битола..."
+                className="w-full p-3 border-2 border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-indigo-500 focus:outline-none"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 mt-4">
+            <button
+              onClick={() => setFilters({})}
+              className="px-6 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-black text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+            >
+              Ресетирај
+            </button>
+            <button
+              onClick={handleSearch}
+              className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition"
+            >
+              Пребарај
+            </button>
+          </div>
+        </GlassCard>
+      )}
+    </div>
+  );
+};
+
+// Group Recommendations Component
+const GroupRecommendations: React.FC<{
+  friends: Friend[];
+  onGetRecommendations: (selectedIds: number[]) => void;
+  recommendations: Event[];
+  venues: VenuesMap;
+}> = ({ friends, onGetRecommendations, recommendations, venues }) => {
+  const [selectedFriends, setSelectedFriends] = useState<number[]>([]);
+
+  const toggleFriend = (id: number) => {
+    setSelectedFriends(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <GlassCard className="p-6">
+        <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-3">
+          <Users className="w-6 h-6 text-indigo-600" />
+          Избери пријатели
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          {friends.map(friend => (
+            <button
+              key={friend.id}
+              onClick={() => toggleFriend(friend.id)}
+              className={`p-4 rounded-2xl border-2 transition-all ${
+                selectedFriends.includes(friend.id)
+                  ? 'bg-indigo-100 dark:bg-indigo-900/30 border-indigo-500 text-indigo-700 dark:text-indigo-300'
+                  : 'border-slate-200 dark:border-slate-700 hover:border-indigo-300'
+              }`}
+            >
+              <div className="text-sm font-bold">{friend.name}</div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400">{friend.city}</div>
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => onGetRecommendations(selectedFriends)}
+          disabled={selectedFriends.length === 0}
+          className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest disabled:opacity-50 hover:bg-indigo-700 transition"
+        >
+          Најди заеднички настани ({selectedFriends.length})
+        </button>
+      </GlassCard>
+
+      {recommendations.length > 0 && (
+        <div>
+          <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-6">
+            Заеднички препораки
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {recommendations.map(event => (
+              <EventCard key={event.id || event.event_id} event={event} venue={venues[event.venue_id!]} showRecommendation />
             ))}
           </div>
         </div>
@@ -578,225 +517,21 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, venues }) => {
   );
 };
 
-// Search component
-interface SearchComponentProps {
-  onSearch: (query: string, filters: Partial<Filters>) => void;
-  loading?: boolean;
-}
-
-const SearchComponent: React.FC<SearchComponentProps> = ({ onSearch, loading = false }) => {
-  const [query, setQuery] = useState<string>('');
-  const [filters, setFilters] = useState<Partial<Filters>>({});
-  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-
-  // Common event tags
-  const availableTags = [
-    'IT', 'Music', 'Theater', 'Sports', 'Art', 'Food',
-    'Business', 'Education', 'Science', 'Entertainment',
-    'Health', 'Fashion', 'Technology', 'Culture'
-  ];
-
-  const handleSearch = () => {
-    const searchFilters = {
-      ...filters,
-      tags: selectedTags.length > 0 ? selectedTags.join(',') : ''
-    };
-    onSearch(query, searchFilters);
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
-  };
-
-  const toggleTag = (tag: string) => {
-    setSelectedTags(prev =>
-      prev.includes(tag)
-        ? prev.filter(t => t !== tag)
-        : [...prev, tag]
-    );
-  };
-
-  const clearFilters = () => {
-    setFilters({});
-    setSelectedTags([]);
-    setQuery('');
-    onSearch('', {});
-  };
-
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-6">
-      <div className="flex gap-4 mb-4">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="Пребарај настани..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyPress={handleKeyPress}
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-          />
-        </div>
-        <button
-          onClick={handleSearch}
-          disabled={loading}
-          className={`px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors ${
-            loading ? 'opacity-50 cursor-not-allowed' : ''
-          }`}
-        >
-          {loading ? 'Пребарувам...' : 'Пребарај'}
-        </button>
-        <button
-          onClick={() => setShowAdvanced(!showAdvanced)}
-          className={`px-4 py-3 border rounded-lg transition-colors ${
-            showAdvanced
-              ? 'bg-indigo-100 border-indigo-500 dark:bg-indigo-900 dark:border-indigo-500'
-              : 'border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-          }`}
-        >
-          <Settings className="w-5 h-5" />
-        </button>
-      </div>
-
-      {showAdvanced && (
-        <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-          {/* Tags/Categories */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Категории / Тагови
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {availableTags.map(tag => (
-                <button
-                  key={tag}
-                  onClick={() => toggleTag(tag)}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                    selectedTags.includes(tag)
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  }`}
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-            {selectedTags.length > 0 && (
-              <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                Избрани: {selectedTags.join(', ')}
-              </div>
-            )}
-          </div>
-
-          {/* Date Range and City */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Од датум
-              </label>
-              <input
-                type="date"
-                value={filters.start || ''}
-                onChange={(e) => setFilters({...filters, start: e.target.value})}
-                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                До датум
-              </label>
-              <input
-                type="date"
-                value={filters.end || ''}
-                onChange={(e) => setFilters({...filters, end: e.target.value})}
-                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Град
-              </label>
-              <input
-                type="text"
-                placeholder="Внесете град..."
-                value={filters.city || ''}
-                onChange={(e) => setFilters({...filters, city: e.target.value})}
-                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-          </div>
-
-          {/* Sort Options */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Сортирај по
-            </label>
-            <select
-              value={filters.sortBy || ''}
-              onChange={(e) => setFilters({...filters, sortBy: e.target.value})}
-              className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="">Релевантност</option>
-              <option value="date_newest">Датум (Најнови)</option>
-              <option value="date_oldest">Датум (Најстари)</option>
-              <option value="relevance">Релевантност</option>
-            </select>
-          </div>
-
-          {/* Clear Filters Button */}
-          <div className="flex justify-end">
-            <button
-              onClick={clearFilters}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-            >
-              <X className="w-4 h-4" />
-              Ресетирај филтри
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Notification Badge Component
-interface NotificationsProps {
-  accessToken: string | null;
-}
-
-const Notifications: React.FC<NotificationsProps> = ({ accessToken }) => {
+// Notifications Component
+const Notifications: React.FC<{ accessToken: string | null }> = ({ accessToken }) => {
   const [notifications, setNotifications] = useState<any[]>([]);
-  const [showDropdown, setShowDropdown] = useState<boolean>(false);
-  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [showDropdown, setShowDropdown] = useState(false);
 
   useEffect(() => {
     if (accessToken) {
-      loadNotifications();
-      // Poll for new notifications every 30 seconds
-      const interval = setInterval(loadNotifications, 30000);
-      return () => clearInterval(interval);
+      fetch(`${BACKEND_BASE}/api/friends/pending`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      })
+        .then(res => res.json())
+        .then(data => setNotifications(data || []))
+        .catch(() => {});
     }
   }, [accessToken]);
-
-  const loadNotifications = async () => {
-    try {
-      const response = await fetch(`${BACKEND_BASE}/api/friends/pending`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setNotifications(data);
-        setUnreadCount(data.length);
-      }
-    } catch (error) {
-      console.error('Error loading notifications:', error);
-    }
-  };
 
   const acceptFriend = async (requesterId: number) => {
     try {
@@ -804,59 +539,55 @@ const Notifications: React.FC<NotificationsProps> = ({ accessToken }) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
+          Authorization: `Bearer ${accessToken}`
         },
         body: JSON.stringify({ user_id: requesterId })
       });
-
-      loadNotifications(); // Reload notifications
-    } catch (error) {
-      console.error('Error accepting friend:', error);
-    }
+      setNotifications(prev => prev.filter(n => n.requester_id !== requesterId));
+    } catch {}
   };
 
   return (
     <div className="relative">
       <button
         onClick={() => setShowDropdown(!showDropdown)}
-        className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg relative"
+        className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition relative"
       >
         <Bell className="w-5 h-5" />
-        {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-            {unreadCount}
+        {notifications.length > 0 && (
+          <span className="absolute top-1 right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center">
+            {notifications.length}
           </span>
         )}
       </button>
 
       {showDropdown && (
-        <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50">
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="font-semibold text-gray-900 dark:text-white">Нотификации</h3>
+        <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border-2 border-slate-200/50 dark:border-slate-700/50 z-50 overflow-hidden">
+          <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+            <h3 className="font-black text-slate-900 dark:text-white">Нотификации</h3>
           </div>
-
           <div className="max-h-96 overflow-y-auto">
             {notifications.length > 0 ? (
-              notifications.map((notif, index) => (
-                <div key={index} className="p-4 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
-                  <div className="flex items-start space-x-3">
-                    <div className="w-10 h-10 bg-indigo-500 rounded-full flex items-center justify-center">
+              notifications.map((notif, idx) => (
+                <div key={idx} className="p-4 border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 bg-indigo-500 rounded-2xl flex items-center justify-center">
                       <UserPlus className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm text-gray-900 dark:text-white">
-                        <span className="font-semibold">{notif.requester_name}</span> сака да те додаде како пријател
+                      <p className="text-sm text-slate-900 dark:text-white font-medium">
+                        <span className="font-black">{notif.requester_name}</span> сака да те додаде
                       </p>
-                      <div className="flex space-x-2 mt-2">
+                      <div className="flex gap-2 mt-2">
                         <button
                           onClick={() => acceptFriend(notif.requester_id)}
-                          className="px-3 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700"
+                          className="px-4 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-black hover:bg-indigo-700"
                         >
                           Прифати
                         </button>
                         <button
                           onClick={() => setShowDropdown(false)}
-                          className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                          className="px-4 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-black"
                         >
                           Подоцна
                         </button>
@@ -866,9 +597,7 @@ const Notifications: React.FC<NotificationsProps> = ({ accessToken }) => {
                 </div>
               ))
             ) : (
-              <div className="p-8 text-center text-gray-500">
-                Нема нови нотификации
-              </div>
+              <div className="p-8 text-center text-slate-400">Нема нови нотификации</div>
             )}
           </div>
         </div>
@@ -877,620 +606,202 @@ const Notifications: React.FC<NotificationsProps> = ({ accessToken }) => {
   );
 };
 
-// User Profile Modal Component
-interface UserProfileProps {
-  userId: number;
-  onClose: () => void;
-  accessToken: string | null;
-}
-
-const UserProfileModal: React.FC<UserProfileProps> = ({ userId, onClose, accessToken }) => {
-  const [profile, setProfile] = useState<any>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-
-  useEffect(() => {
-    loadProfile();
-  }, [userId]);
-
-  const loadProfile = async () => {
-    try {
-      const response = await fetch(`${BACKEND_BASE}/api/user/profile/${userId}`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setProfile(data);
-      }
-    } catch (error) {
-      console.error('Error loading profile:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-8">
-          <div className="animate-pulse">Вчитувам профил...</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!profile) {
-    return null;
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full m-4" onClick={(e) => e.stopPropagation()}>
-        <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Профил</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <span className="text-2xl">×</span>
-          </button>
-        </div>
-
-        <div className="p-6">
-          <div className="flex items-center mb-6">
-            <div className="w-20 h-20 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mr-4">
-              <User className="w-10 h-10 text-white" />
-            </div>
-            <div>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{profile.name}</h3>
-              <p className="text-gray-600 dark:text-gray-400">{profile.email}</p>
-              {profile.city && (
-                <p className="text-sm text-gray-500 mt-1">📍 {profile.city}</p>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <div className="bg-indigo-50 dark:bg-indigo-900 p-4 rounded-lg">
-              <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-300">
-                {profile.stats.total_attended}
-              </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Настани присуствувани</div>
-            </div>
-            <div className="bg-pink-50 dark:bg-pink-900 p-4 rounded-lg">
-              <div className="text-2xl font-bold text-pink-600 dark:text-pink-300">
-                {profile.stats.total_liked}
-              </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Омилени настани</div>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="font-semibold text-gray-900 dark:text-white mb-3">Последни активности</h4>
-            <div className="space-y-2">
-              {profile.recent_activities.slice(0, 5).map((activity: any, index: number) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">{activity.event_title}</p>
-                    <p className="text-xs text-gray-500">
-                      {activity.rating === 1 ? '❤️ Лајк' : activity.rating === -1 ? '👎 Дислајк' : '✓ Присуствувал'}
-                    </p>
-                  </div>
-                  <span className="text-xs text-gray-400">
-                    {new Date(activity.date).toLocaleDateString('mk-MK')}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Friends Search Component
-interface FriendsSearchProps {
-  onAddFriend: (userId: number) => Promise<void>;
-  onViewProfile: (userId: number) => void;
-}
-
-const FriendsSearch: React.FC<FriendsSearchProps> = ({ onAddFriend, onViewProfile }) => {
-  const [query, setQuery] = useState<string>('');
-  const [results, setResults] = useState<Friend[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-
-  const searchUsers = async () => {
-    if (query.length < 2) {
-      setResults([]);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const token = getStoredToken();
-      const response = await fetch(`${BACKEND_BASE}/api/user/search`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ query })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setResults(data);
-      }
-    } catch (error) {
-      console.error('Error searching users:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    const timer = setTimeout(searchUsers, 300);
-    return () => clearTimeout(timer);
-  }, [query]);
-
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
-        Додај пријатели
-      </h3>
-
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-        <input
-          type="text"
-          placeholder="Пребарај корисници..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-        />
-      </div>
-
-      {loading && (
-        <div className="text-center py-4 text-gray-500">Пребарувам...</div>
-      )}
-
-      <div className="space-y-2">
-        {results.map((user) => (
-          <div key={user.id} className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
-            <div>
-              <div className="font-semibold text-gray-900 dark:text-white">{user.name}</div>
-              {user.city && (
-                <div className="text-sm text-gray-500">{user.city}</div>
-              )}
-            </div>
-
-            <div className="flex items-center space-x-2">
-              {user.friendship_status === 'none' ? (
-                <button
-                  onClick={() => onAddFriend(user.id)}
-                  className="flex items-center px-3 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm"
-                >
-                  <UserPlus className="w-4 h-4 mr-1" />
-                  Додај
-                </button>
-              ) : (
-                <span className="text-sm text-gray-500 capitalize">
-                  {user.friendship_status === 'pending' ? 'Чека одобрување' :
-                   user.friendship_status === 'accepted' ? 'Пријател' : user.friendship_status}
-                </span>
-              )}
-              <button
-                onClick={() => onViewProfile(user.id)}
-                className="px-3 py-1 border border-indigo-600 text-indigo-600 rounded-lg hover:bg-indigo-50 text-sm"
-              >
-                Профил
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// Main App компонента
+// --- MAIN APP ---
 const EventSocialNetwork: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<string>('discover');
-  const [darkMode, setDarkMode] = useState<boolean>(() => getStoredTheme());
-  const [user, setUser] = useState<User | null>(null);
-  const [accessToken, setAccessToken] = useState<string | null>(() => getStoredToken());
+  const [activeTab, setActiveTab] = useState('discover');
+  const [darkMode, setDarkMode] = useState(getStoredTheme());
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(getStoredToken());
   const [events, setEvents] = useState<Event[]>([]);
   const [venues, setVenues] = useState<VenuesMap>({});
   const [recommendations, setRecommendations] = useState<Event[]>([]);
   const [favorites, setFavorites] = useState<Event[]>([]);
-  const [attended, setAttended] = useState<Event[]>([]);
   const [friends, setFriends] = useState<Friend[]>([]);
-  const [socialFeed, setSocialFeed] = useState<any[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
-  const [groupRecommendations, setGroupRecommendations] = useState<Event[]>([]);
-  const [selectedFriendsForGroup, setSelectedFriendsForGroup] = useState<number[]>([]);
-
+  const [feed, setFeed] = useState<any[]>([]);
+  const [groupRecs, setGroupRecs] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(false);
   const [loginForm, setLoginForm] = useState<LoginForm>({ email: '', password: '' });
-  const [showLogin, setShowLogin] = useState<boolean>(!accessToken);
+  const [showFindFriends, setShowFindFriends] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
 
-  const [filters] = useState<Filters>({
-    start: '',
-    end: '',
-    city: '',
-    tags: '',
-    search: ''
-  });
-
-  // Dark mode effect
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    document.documentElement.classList.toggle('dark', darkMode);
     setStoredTheme(darkMode);
   }, [darkMode]);
 
-  // Auto-load data when token exists
-  useEffect(() => {
-    if (accessToken) {
-      loadEvents();
-      loadRecommendations();
-      loadFriends();
-      loadFavorites();
-      loadAttended();
-      loadSocialFeed();
-    }
+  const apiCall = useCallback(async (endpoint: string, options: RequestInit = {}) => {
+    const headers: any = { 'Content-Type': 'application/json' };
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
+    const response = await fetch(`${BACKEND_BASE}${endpoint}`, { headers, ...options });
+    if (!response.ok) throw new Error();
+    return await response.json();
   }, [accessToken]);
 
-  const apiCall = async (endpoint: string, options: RequestInit = {}): Promise<any> => {
-    const headers: HeadersInit = { 'Content-Type': 'application/json' };
-    if (accessToken) {
-      (headers as any).Authorization = `Bearer ${accessToken}`;
-    }
-
-    const response = await fetch(`${BACKEND_BASE}${endpoint}`, {
-      headers,
-      ...options
-    });
-
-    if (!response.ok) throw new Error(`API error: ${response.status}`);
-    return response.json();
-  };
-
-  const login = async (e: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLInputElement>): Promise<void> => {
-    e.preventDefault();
-    if (!loginForm.email || !loginForm.password) return;
-
+  const loadData = useCallback(async () => {
+    if (!accessToken) return;
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await apiCall('/api/auth/login', {
+      const [evs, vens, recs, favs, frnds, feedData] = await Promise.all([
+        apiCall('/api/events'),
+        apiCall('/api/venues'),
+        apiCall('/api/recommend/me?limit=10000'),
+        apiCall('/api/user/favorites'),
+        apiCall('/api/friends/list'),
+        apiCall('/api/feed')
+      ]);
+      setEvents(Array.isArray(evs) ? evs : []);
+      setVenues((vens || []).reduce((acc: any, v: Venue) => ({ ...acc, [v.id]: v }), {}));
+      setRecommendations(Array.isArray(recs) ? recs : []);
+      setFavorites(Array.isArray(favs) ? favs : []);
+      setFriends(Array.isArray(frnds) ? frnds : []);
+      setFeed(Array.isArray(feedData) ? feedData : []);
+    } catch (err) {
+      console.error('Error loading data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [accessToken, apiCall]);
+
+  useEffect(() => {
+    if (accessToken) loadData();
+  }, [accessToken, loadData]);
+
+  const handleLogin = async () => {
+    if (!loginForm.email || !loginForm.password) return;
+    setLoading(true);
+    try {
+      const data = await apiCall('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify(loginForm)
       });
-
-      setAccessToken(response.access_token);
-      setStoredToken(response.access_token);
-      setUser(response.user);
-      setShowLogin(false);
-    } catch (error: any) {
-      alert('Грешка при најава: ' + error.message);
+      setAccessToken(data.access_token);
+      setStoredToken(data.access_token);
+      setUser(data.user);
+    } catch {
+      alert('Погрешен email или лозинка!');
     } finally {
       setLoading(false);
     }
   };
 
-  const logout = (): void => {
-    setAccessToken(null);
-    setStoredToken(null);
-    setUser(null);
-    setShowLogin(true);
-    setEvents([]);
-    setVenues({});
-    setRecommendations([]);
-    setFavorites([]);
-    setAttended([]);
-    setFriends([]);
-    setSocialFeed([]);
-  };
-
-  const loadEvents = async (): Promise<void> => {
-    setLoading(true);
+  const handleToggleFavorite = async (eventId: number) => {
     try {
-      const params = new URLSearchParams();
-      Object.entries(filters).forEach(([key, value]: [string, string]) => {
-        if (value) params.append(key, value);
-      });
-
-      const eventsData = await apiCall(`/api/events?${params}`);
-      setEvents(Array.isArray(eventsData) ? eventsData : []);
-
-      const venuesData = await apiCall('/api/venues');
-      const venuesMap: VenuesMap = {};
-      if (Array.isArray(venuesData)) {
-        venuesData.forEach((v: Venue) => venuesMap[v.id] = v);
-      }
-      setVenues(venuesMap);
-    } catch (error: any) {
-      console.error('Error loading events:', error);
-      setEvents([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadRecommendations = async (): Promise<void> => {
-    try {
-      // Земи СИТЕ настани (548), не само топ 100!
-      const recs = await apiCall('/api/recommend/me?limit=10000');
-      setRecommendations(Array.isArray(recs) ? recs : []);
-    } catch (error: any) {
-      console.error('Error loading recommendations:', error);
-      setRecommendations([]);
-    }
-  };
-
-  const loadFavorites = async (): Promise<void> => {
-    try {
-      const favs = await apiCall('/api/user/favorites');
-      setFavorites(Array.isArray(favs) ? favs : []);
-    } catch (error: any) {
-      console.error('Error loading favorites:', error);
-      setFavorites([]);
-    }
-  };
-
-  const loadAttended = async (): Promise<void> => {
-    try {
-      const att = await apiCall('/api/user/attended');
-      setAttended(Array.isArray(att) ? att : []);
-    } catch (error: any) {
-      console.error('Error loading attended:', error);
-      setAttended([]);
-    }
-  };
-
-  const loadFriends = async (): Promise<void> => {
-    try {
-      const friendsData = await apiCall('/api/friends/list');
-      setFriends(Array.isArray(friendsData) ? friendsData : []);
-    } catch (error: any) {
-      console.error('Error loading friends:', error);
-      setFriends([]);
-    }
-  };
-
-  const loadSocialFeed = async (): Promise<void> => {
-    try {
-      const feed = await apiCall('/api/feed');
-      setSocialFeed(Array.isArray(feed) ? feed : []);
-    } catch (error: any) {
-      console.error('Error loading social feed:', error);
-      setSocialFeed([]);
-    }
-  };
-
-  const handleSearch = async (query: string, searchFilters: Partial<Filters>): Promise<void> => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (query) params.append('q', query);
-
-      Object.entries(searchFilters).forEach(([key, value]) => {
-        if (value) params.append(key, value);
-      });
-
-      // Fixed: Use correct endpoint /api/events instead of /api/search/events
-      const searchResults = await apiCall(`/api/events?${params}`);
-      setEvents(Array.isArray(searchResults) ? searchResults : []);
-    } catch (error: any) {
-      console.error('Error searching events:', error);
-      setEvents([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-
-
-  const handleToggleFavorite = async (eventId: number): Promise<void> => {
-    try {
-      // Провери дали настанот е веќе лајкан
-      const event = events.find(e => e.id === eventId) || recommendations.find(e => (e.id || e.event_id) === eventId);
-      const currentRating = event?.my_rating || 0;
-
-      // Toggle: ако е лајкан (1), стави neutral (0), ако не е, стави like (1)
-      const newRating = currentRating === 1 ? 0 : 1;
-
+      const event = [...events, ...recommendations, ...favorites].find(e => (e.id || e.event_id) === eventId);
       await apiCall(`/api/events/${eventId}/rate`, {
         method: 'POST',
-        body: JSON.stringify({ rating: newRating })
+        body: JSON.stringify({ rating: event?.my_rating === 1 ? 0 : 1 })
       });
-
-      // ВАЖНО: Ажурирај my_rating локално во СИТЕ states за моментална визуелна feedback
-      setEvents(prevEvents =>
-        prevEvents.map(e => e.id === eventId ? { ...e, my_rating: newRating } : e)
-      );
-      setRecommendations(prevRecs =>
-        prevRecs.map(e => (e.id === eventId || e.event_id === eventId) ? { ...e, my_rating: newRating } : e)
-      );
-      setFavorites(prevFavs =>
-        prevFavs.map(e => e.id === eventId ? { ...e, my_rating: newRating } : e)
-      );
-      setGroupRecommendations(prevGroup =>
-        prevGroup.map(e => (e.id === eventId || e.event_id === eventId) ? { ...e, my_rating: newRating } : e)
-      );
-
-      // Refresh data од server за да ги земеме новите скорови
-      loadFavorites();
-      loadEvents();
-      loadRecommendations(); // Важно! Треба да се ажурираат препораките
-      loadSocialFeed();
-    } catch (error: any) {
-      console.error('Error toggling favorite:', error);
-      throw error;
-    }
+      await loadData();
+    } catch {}
   };
 
-  const handleToggleAttended = async (eventId: number): Promise<void> => {
+  const handleToggleAttended = async (eventId: number) => {
     try {
-      await apiCall(`/api/events/${eventId}/toggle-attended`, {
-        method: 'PATCH'
-      });
-
-      // Refresh data
-      loadAttended();
-      loadEvents();
-      loadSocialFeed();
-    } catch (error: any) {
-      console.error('Error toggling attended:', error);
-      throw error;
-    }
-  };
-
-  const handleDislike = async (eventId: number): Promise<void> => {
-    try {
-      // Провери дали настанот е веќе дислајкан
-      const event = events.find(e => e.id === eventId) || recommendations.find(e => (e.id || e.event_id) === eventId);
-      const currentRating = event?.my_rating || 0;
-
-      // Toggle: ако е дислајкан (-1), стави neutral (0), ако не е, стави dislike (-1)
-      const newRating = currentRating === -1 ? 0 : -1;
-
       await apiCall(`/api/events/${eventId}/rate`, {
         method: 'POST',
-        body: JSON.stringify({ rating: newRating })
+        body: JSON.stringify({ rating: 0 })
       });
+      await loadData();
+    } catch {}
+  };
 
-      // ВАЖНО: Ажурирај my_rating локално во СИТЕ states за моментална визуелна feedback
-      setEvents(prevEvents =>
-        prevEvents.map(e => e.id === eventId ? { ...e, my_rating: newRating } : e)
-      );
-      setRecommendations(prevRecs =>
-        prevRecs.map(e => (e.id === eventId || e.event_id === eventId) ? { ...e, my_rating: newRating } : e)
-      );
-      setFavorites(prevFavs =>
-        prevFavs.map(e => e.id === eventId ? { ...e, my_rating: newRating } : e)
-      );
-      setGroupRecommendations(prevGroup =>
-        prevGroup.map(e => (e.id === eventId || e.event_id === eventId) ? { ...e, my_rating: newRating } : e)
-      );
-
-      // Refresh data од server за да ги земеме новите скорови
-      loadEvents();
-      loadRecommendations(); // Ажурирај препораки
-      loadSocialFeed();
-    } catch (error: any) {
-      console.error('Error disliking event:', error);
-      throw error;
+  const handleGroupRecommendations = async (selectedIds: number[]) => {
+    if (selectedIds.length === 0) return;
+    setLoading(true);
+    try {
+      const data = await apiCall('/api/recommend/group', {
+        method: 'POST',
+        body: JSON.stringify({ user_ids: selectedIds })
+      });
+      setGroupRecs(Array.isArray(data) ? data : []);
+    } catch {
+      setGroupRecs([]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleAddFriend = async (userId: number): Promise<void> => {
+  const handleSearchUsers = async () => {
+    if (!searchQuery.trim()) return;
+    try {
+      const data = await apiCall(`/api/users/search?q=${encodeURIComponent(searchQuery)}`);
+      setSearchResults(Array.isArray(data) ? data : []);
+    } catch {
+      setSearchResults([]);
+    }
+  };
+
+  const handleFriendRequest = async (userId: number) => {
     try {
       await apiCall('/api/friends/request', {
         method: 'POST',
         body: JSON.stringify({ user_id: userId })
       });
-
-      alert('Барањето за пријателство е испратено!');
-    } catch (error: any) {
-      console.error('Error adding friend:', error);
-      alert('Грешка при додавање на пријател');
-    }
+      await handleSearchUsers();
+    } catch {}
   };
 
-  const loadGroupRecommendations = async (friendIds: number[]): Promise<void> => {
-    if (friendIds.length === 0) {
-      setGroupRecommendations([]);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const userIds = [user?.id, ...friendIds].filter(Boolean);
-      const recs = await apiCall('/api/recommend/group', {
-        method: 'POST',
-        body: JSON.stringify({ user_ids: userIds })
-      });
-      setGroupRecommendations(Array.isArray(recs) ? recs : []);
-    } catch (error: any) {
-      console.error('Error loading group recommendations:', error);
-      setGroupRecommendations([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const toggleFriendSelection = (friendId: number): void => {
-    setSelectedFriendsForGroup(prev => {
-      if (prev.includes(friendId)) {
-        const newSelection = prev.filter(id => id !== friendId);
-        loadGroupRecommendations(newSelection);
-        return newSelection;
-      } else {
-        const newSelection = [...prev, friendId];
-        loadGroupRecommendations(newSelection);
-        return newSelection;
-      }
-    });
-  };
-
-  if (showLogin) {
+  if (!accessToken) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full mx-auto mb-4 flex items-center justify-center">
-              <Calendar className="w-8 h-8 text-white" />
+      <div className="min-h-screen bg-white dark:bg-slate-950 flex flex-col items-center justify-center p-6">
+        <div className="w-full max-w-lg relative">
+          <div className="absolute -top-24 -left-24 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl"></div>
+          <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-rose-500/10 rounded-full blur-3xl"></div>
+
+          <div className="text-center mb-12 relative">
+            <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-indigo-600 to-violet-700 rounded-[2.5rem] shadow-2xl shadow-indigo-500/40 mb-8 rotate-3">
+              <Calendar className="w-12 h-12 text-white" />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              EventConnect
+            <h1 className="text-5xl font-black text-slate-900 dark:text-white mb-4 tracking-tighter">
+              EventConnect<span className="text-indigo-600">.</span>
             </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Твојата социјална мрежа за настани
-            </p>
+            <p className="text-slate-500 dark:text-slate-400 font-semibold text-lg">Најдобрите настани, на дланка.</p>
           </div>
 
-          <div className="space-y-6">
-            <div>
-              <input
-                type="email"
-                placeholder="Email адреса"
-                value={loginForm.email}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLoginForm({...loginForm, email: e.target.value})}
-                className="w-full p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && login(e)}
-              />
+          <GlassCard className="p-10 border-t-8 border-t-indigo-600">
+            <div className="space-y-6">
+              <div>
+                <label className="block text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-3 ml-1">Емаил адреса</label>
+                <input
+                  type="email"
+                  className="w-full bg-slate-50 dark:bg-slate-800/50 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-4 px-5 focus:border-indigo-500 focus:outline-none transition-all dark:text-white font-medium"
+                  placeholder="name@example.com"
+                  value={loginForm.email}
+                  onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-3 ml-1">Лозинка</label>
+                <input
+                  type="password"
+                  className="w-full bg-slate-50 dark:bg-slate-800/50 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-4 px-5 focus:border-indigo-500 focus:outline-none transition-all dark:text-white font-medium"
+                  placeholder="••••••••"
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                />
+              </div>
+              <button
+                onClick={handleLogin}
+                disabled={loading}
+                className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-5 rounded-[1.5rem] font-black text-sm uppercase tracking-widest shadow-2xl hover:translate-y-[-2px] active:translate-y-0 transition-all disabled:opacity-50"
+              >
+                {loading ? 'Се најавува...' : 'Влези во светот на настаните'}
+              </button>
             </div>
-            <div>
-              <input
-                type="password"
-                placeholder="Лозинка"
-                value={loginForm.password}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLoginForm({...loginForm, password: e.target.value})}
-                className="w-full p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && login(e)}
-              />
-            </div>
-            <button
-              onClick={(e: React.MouseEvent<HTMLButtonElement>) => login(e)}
-              disabled={loading}
-              className={`w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-4 rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 shadow-lg ${
-                loading ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
-            >
-              {loading ? 'Се најавувам...' : 'Најави се'}
-            </button>
-          </div>
+          </GlassCard>
 
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              Тест корисници: <br />
-              martin.stamenov03@gmail.com / test123<br />
-              teodorasaneva@gmail.com / test123
-            </p>
+          <div className="mt-8 text-center bg-indigo-50/50 dark:bg-slate-900/50 backdrop-blur-md p-6 rounded-[2rem] border border-indigo-100/50 dark:border-slate-800/50">
+            <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-black uppercase tracking-[0.25em] mb-3">ТЕСТ ПОДАТОЦИ</p>
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                martin.stamenov03@gmail.com <span className="text-slate-400 font-medium mx-1">/</span> <span className="text-slate-900 dark:text-slate-200">test123</span>
+              </p>
+              <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                teodorasaneva@gmail.com <span className="text-slate-400 font-medium mx-1">/</span> <span className="text-slate-900 dark:text-slate-200">test123</span>
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -1498,41 +809,45 @@ const EventSocialNetwork: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200 ${darkMode ? 'dark' : ''}`}>
-      <header className="bg-white dark:bg-gray-800 shadow-lg border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center mr-3">
-                <Calendar className="w-6 h-6 text-white" />
+    <div className="min-h-screen bg-[#FDFDFF] dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+      {/* Header */}
+      <header className="sticky top-0 z-50 bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border-b border-slate-200/50 dark:border-slate-800/50">
+        <div className="max-w-7xl mx-auto px-6 lg:px-10">
+          <div className="flex justify-between items-center h-24">
+            <div className="flex items-center gap-4 group cursor-pointer">
+              <div className="w-12 h-12 bg-gradient-to-tr from-indigo-600 to-violet-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/30 group-hover:rotate-6 transition-transform">
+                <Calendar className="w-7 h-7 text-white" />
               </div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                EventConnect
-              </h1>
+              <span className="text-2xl font-black tracking-tighter hidden sm:block">
+                EventConnect<span className="text-indigo-600">.</span>
+              </span>
             </div>
 
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center gap-4">
+              <Notifications accessToken={accessToken} />
               <button
                 onClick={() => setDarkMode(!darkMode)}
-                className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                title={darkMode ? 'Light Mode' : 'Dark Mode'}
+                className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-all"
               >
                 {darkMode ? '☀️' : '🌙'}
               </button>
 
-              <Notifications accessToken={accessToken} />
-
-              <div className="flex items-center space-x-2">
-                <User className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                <span className="text-sm text-gray-700 dark:text-gray-300">
-                  {user?.name || 'User'}
-                </span>
+              <div className="flex items-center gap-4 pl-4 border-l border-slate-200 dark:border-slate-800">
+                <div className="text-right hidden md:block">
+                  <p className="text-sm font-black leading-none">{user?.name}</p>
+                  <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mt-1">PRO MEMBER</p>
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-slate-900 border-2 border-white dark:border-slate-800 flex items-center justify-center shadow-sm">
+                  <User className="w-6 h-6 text-indigo-600" />
+                </div>
                 <button
-                  onClick={logout}
-                  className="text-sm text-red-600 hover:text-red-700 ml-2"
-                  title="Одјави се"
+                  onClick={() => {
+                    setAccessToken(null);
+                    setStoredToken(null);
+                  }}
+                  className="p-3 text-slate-400 hover:text-rose-500 transition-colors"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="w-6 h-6" />
                 </button>
               </div>
             </div>
@@ -1540,429 +855,265 @@ const EventSocialNetwork: React.FC = () => {
         </div>
       </header>
 
-      <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex space-x-8">
-            {[
-              { key: 'discover', label: 'Откријте', icon: Search },
-              { key: 'calendar', label: 'Календар', icon: Calendar },
-              { key: 'recommendations', label: 'Препораки', icon: Star },
-              { key: 'group', label: 'Групни Препораки', icon: Users },
-              { key: 'favorites', label: 'Омилени', icon: Heart },
-              { key: 'attended', label: 'Присуствувал', icon: CheckCircle },
-              { key: 'friends', label: 'Пријатели', icon: Users },
-              { key: 'feed', label: 'Ѕид', icon: MessageCircle }
-            ].map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                onClick={() => setActiveTab(key)}
-                className={`flex items-center px-4 py-4 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === key
-                    ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
-                    : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-                }`}
-              >
-                <Icon className="w-4 h-4 mr-2" />
-                {label}
-              </button>
-            ))}
-          </div>
+      {/* Navigation */}
+      <nav className="max-w-7xl mx-auto px-6 py-8">
+        <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide pb-2">
+          {[
+            { id: 'discover', label: 'Истражи', icon: LayoutGrid },
+            { id: 'calendar', label: 'Календар', icon: Calendar },
+            { id: 'recommendations', label: 'За Тебе', icon: Sparkles },
+            { id: 'group', label: 'Заеднички', icon: Users },
+            { id: 'favorites', label: 'Омилени', icon: Heart },
+            { id: 'friends', label: 'Пријатели', icon: UserPlus },
+            { id: 'feed', label: 'Фид', icon: Activity },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2.5 px-6 py-3.5 rounded-2xl text-sm font-black whitespace-nowrap transition-all border-2 ${
+                activeTab === tab.id
+                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl shadow-indigo-500/20 scale-105'
+                  : 'bg-white dark:bg-slate-900 border-slate-200/50 dark:border-slate-800/50 text-slate-500 hover:border-indigo-300'
+              }`}
+            >
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          ))}
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Content */}
+      <main className="max-w-7xl mx-auto px-6 lg:px-10 pb-20">
         {activeTab === 'discover' && (
-          <div>
-            <SearchComponent onSearch={handleSearch} loading={loading} />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {loading ? (
-                Array.from({length: 6}, (_, i: number) => (
-                  <div key={i} className="bg-white dark:bg-gray-800 rounded-xl shadow-lg h-64 animate-pulse"></div>
-                ))
-              ) : events.length > 0 ? (
-                events.map((event: Event) => (
-                  <EventCard
-                    key={event.id || event.event_id || Math.random()}
-                    event={event}
-                    venue={event.venue_id ? venues[event.venue_id] : undefined}
-                    onToggleFavorite={handleToggleFavorite}
-                    onToggleAttended={handleToggleAttended}
-                    onDislike={handleDislike}
-                  />
-                ))
-              ) : (
-                <div className="col-span-full text-center py-12">
-                  <p className="text-gray-500 dark:text-gray-400">Нема пронајдени настани.</p>
-                </div>
-              )}
+          <div className="space-y-8">
+            <SearchComponent onSearch={(q, f) => console.log('Search:', q, f)} />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+              {events.map(event => (
+                <EventCard
+                  key={event.id}
+                  event={event}
+                  venue={venues[event.venue_id!]}
+                  onToggleFavorite={handleToggleFavorite}
+                  onToggleAttended={handleToggleAttended}
+                />
+              ))}
             </div>
           </div>
         )}
 
-        {activeTab === 'calendar' && (
-          <CalendarView events={events} venues={venues} />
-        )}
+        {activeTab === 'calendar' && <CalendarView events={events} venues={venues} />}
 
         {activeTab === 'recommendations' && (
           <div>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Препораки за тебе
+            <div className="mb-12">
+              <h2 className="text-4xl font-black text-slate-900 dark:text-white flex items-center gap-4">
+                <Sparkles className="w-10 h-10 text-indigo-600" />
+                Селектирано само за тебе
               </h2>
-              <button
-                onClick={loadRecommendations}
-                disabled={loading}
-                className={`bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors ${
-                  loading ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                Освежи
-              </button>
+              <p className="text-slate-500 font-bold mt-2 ml-1">Врз база на твоите интереси</p>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {recommendations.length > 0 ? (
-                recommendations.map((event: Event) => (
-                  <EventCard
-                    key={event.event_id || event.id || Math.random()}
-                    event={event}
-                    venue={event.venue_id ? venues[event.venue_id] : undefined}
-                    onToggleFavorite={handleToggleFavorite}
-                    onToggleAttended={handleToggleAttended}
-                    onDislike={handleDislike}
-                    showRecommendation={true}
-                  />
-                ))
-              ) : (
-                <div className="col-span-full text-center py-12">
-                  <p className="text-gray-500 dark:text-gray-400">Нема препораки за прикажување.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'favorites' && (
-          <div>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Омилени настани ({favorites.length})
-              </h2>
-              <button
-                onClick={loadFavorites}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
-              >
-                Освежи
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {favorites.length > 0 ? (
-                favorites.map((event: Event) => (
-                  <EventCard
-                    key={event.id || Math.random()}
-                    event={event}
-                    venue={event.venue_id ? venues[event.venue_id] : undefined}
-                    onToggleFavorite={handleToggleFavorite}
-                    onToggleAttended={handleToggleAttended}
-                    onDislike={handleDislike}
-                    showActions={true}
-                  />
-                ))
-              ) : (
-                <div className="col-span-full text-center py-12">
-                  <Heart className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500 dark:text-gray-400">Нема омилени настани.</p>
-                  <p className="text-gray-400 text-sm mt-2">Лајкај настани за да ги видиш тука!</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'attended' && (
-          <div>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Присуствувал ({attended.length})
-              </h2>
-              <button
-                onClick={loadAttended}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
-              >
-                Освежи
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {attended.length > 0 ? (
-                attended.map((event: Event) => (
-                  <EventCard
-                    key={event.id || Math.random()}
-                    event={event}
-                    venue={event.venue_id ? venues[event.venue_id] : undefined}
-                    onToggleFavorite={handleToggleFavorite}
-                    onToggleAttended={handleToggleAttended}
-                    onDislike={handleDislike}
-                    showActions={true}
-                  />
-                ))
-              ) : (
-                <div className="col-span-full text-center py-12">
-                  <CheckCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500 dark:text-gray-400">Не сте присуствувале на настани.</p>
-                  <p className="text-gray-400 text-sm mt-2">Означете настани каде сте биле!</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'friends' && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-                Пријатели ({friends.length})
-              </h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                {friends.length > 0 ? (
-                  friends.map((friend: Friend) => (
-                    <div key={friend.id || Math.random()} className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 cursor-pointer hover:shadow-xl transition-shadow"
-                         onClick={() => setSelectedProfileId(friend.id)}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center">
-                          <div className="w-12 h-12 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mr-4">
-                            <User className="w-6 h-6 text-white" />
-                          </div>
-                          <div>
-                            <h3 className="font-semibold text-gray-900 dark:text-white">
-                              {friend.name || 'Без име'}
-                            </h3>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                              {friend.city || 'Без локација'}
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-gray-400">→</span>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="col-span-full text-center py-12">
-                    <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                    <p className="text-gray-500 dark:text-gray-400">Нема пријатели.</p>
-                    <p className="text-gray-400 text-sm mt-2">Пребарајте и додајте пријатели подолу!</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <FriendsSearch onAddFriend={handleAddFriend} onViewProfile={setSelectedProfileId} />
-          </div>
-        )}
-
-        {activeTab === 'feed' && (
-          <div>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Социјален ѕид
-              </h2>
-              <button
-                onClick={loadSocialFeed}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
-              >
-                Освежи
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {socialFeed.length > 0 ? (
-                socialFeed.map((activity, index) => (
-                  <div key={index} className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-                    <div className="flex items-start space-x-4">
-                      <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
-                        <User className="w-6 h-6 text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <span className="font-semibold text-gray-900 dark:text-white">
-                            {activity.user.name}
-                          </span>
-                          <span className="text-gray-500 dark:text-gray-400">
-                            {activity.action === 'liked' ? 'му се допаѓа' :
-                             activity.action === 'attended' ? 'присуствуваше на' :
-                             'не му се допаѓа'} настанот
-                          </span>
-                        </div>
-                        <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                          <h4 className="font-semibold text-gray-900 dark:text-white">
-                            {activity.event.title}
-                          </h4>
-                          <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mt-1">
-                            <MapPin className="w-4 h-4 mr-1" />
-                            <span>{activity.event.venue}</span>
-                            <span className="mx-2">•</span>
-                            <Clock className="w-4 h-4 mr-1" />
-                            <span>{formatEventDate(activity.event.starts_at).relative}</span>
-                          </div>
-                        </div>
-                        <div className="text-xs text-gray-400 mt-2">
-                          {new Date(activity.timestamp).toLocaleString('mk-MK')}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-12">
-                  <MessageCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500 dark:text-gray-400">Нема активности.</p>
-                  <p className="text-gray-400 text-sm mt-2">Додајте пријатели за да видите нивни активности!</p>
-                </div>
-              )}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+              {recommendations.map(event => (
+                <EventCard
+                  key={event.id || event.event_id}
+                  event={event}
+                  venue={venues[event.venue_id!]}
+                  showRecommendation
+                  onToggleFavorite={handleToggleFavorite}
+                  onToggleAttended={handleToggleAttended}
+                />
+              ))}
             </div>
           </div>
         )}
 
         {activeTab === 'group' && (
-          <div>
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                🎉 Групни Препораки
-              </h2>
-              <p className="text-gray-600 dark:text-gray-400">
-                Избери пријатели и пронајди настани што ќе ви се допаднат на СИТЕ!
-              </p>
-            </div>
+          <GroupRecommendations
+            friends={friends}
+            onGetRecommendations={handleGroupRecommendations}
+            recommendations={groupRecs}
+            venues={venues}
+          />
+        )}
 
-            {friends.length === 0 ? (
-              <div className="text-center py-12">
-                <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500 dark:text-gray-400">Нема пријатели.</p>
-                <p className="text-gray-400 text-sm mt-2">Додајте пријатели за да користите групни препораки!</p>
+        {activeTab === 'favorites' && (
+          <div>
+            <h2 className="text-3xl font-black mb-10 text-slate-900 dark:text-white flex items-center gap-4">
+              <Heart className="w-10 h-10 text-rose-500 fill-current" />
+              Твојата листа на желби ({favorites.length})
+            </h2>
+            {favorites.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {favorites.map(event => (
+                  <EventCard
+                    key={event.id}
+                    event={event}
+                    venue={venues[event.venue_id!]}
+                    onToggleFavorite={handleToggleFavorite}
+                    onToggleAttended={handleToggleAttended}
+                  />
+                ))}
               </div>
             ) : (
-              <div>
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-6">
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-4">
-                    Избери пријатели ({selectedFriendsForGroup.length} избрани)
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {friends.map((friend: Friend) => {
-                      const isSelected = selectedFriendsForGroup.includes(friend.id);
-                      return (
-                        <div
-                          key={friend.id}
-                          onClick={() => toggleFriendSelection(friend.id)}
-                          className={`flex items-center p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                            isSelected
-                              ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900'
-                              : 'border-gray-200 dark:border-gray-700 hover:border-indigo-300'
-                          }`}
-                        >
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center mr-3 ${
-                            isSelected ? 'bg-indigo-500' : 'bg-gray-300'
-                          }`}>
-                            {isSelected ? (
-                              <CheckCircle className="w-6 h-6 text-white" />
-                            ) : (
-                              <User className="w-6 h-6 text-gray-600" />
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <div className="font-semibold text-gray-900 dark:text-white">
-                              {friend.name}
-                            </div>
-                            <div className="text-sm text-gray-500">{friend.city}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
+              <div className="text-center py-32 bg-slate-50 dark:bg-slate-900/50 rounded-[3rem] border-2 border-dashed border-slate-200 dark:border-slate-800">
+                <Heart className="w-20 h-20 text-slate-200 dark:text-slate-800 mx-auto mb-6" />
+                <p className="text-slate-400 font-black uppercase tracking-widest">Сеуште немаш омилени настани</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'friends' && (
+          <div>
+            <div className="flex justify-between items-center mb-12">
+              <h2 className="text-3xl font-black">Твоите Пријатели ({friends.length})</h2>
+              <button
+                onClick={() => setShowFindFriends(true)}
+                className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-500/30 hover:scale-105 transition-transform">
+                Најди пријатели
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+              {friends.map(friend => (
+                <GlassCard key={friend.id} className="p-8 text-center">
+                  <div className="w-24 h-24 bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-slate-800 dark:to-slate-900 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-inner border-2 border-white dark:border-slate-700">
+                    <User className="w-12 h-12 text-indigo-600" />
                   </div>
-                </div>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-1">{friend.name}</h3>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8">{friend.city || 'Скопје'}</p>
+                  <button className="w-full py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl text-xs font-black uppercase tracking-widest hover:opacity-90 transition-all">
+                    Порака
+                  </button>
+                </GlassCard>
+              ))}
+            </div>
+          </div>
+        )}
 
-                {selectedFriendsForGroup.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                        Препораки за {selectedFriendsForGroup.length + 1} {selectedFriendsForGroup.length === 0 ? 'корисник' : 'корисници'}
-                      </h3>
-                      {loading && <span className="text-sm text-gray-500">Вчитувам...</span>}
-                    </div>
-
-                    {groupRecommendations.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {groupRecommendations.map((event: any) => (
-                          <div key={event.event_id} className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-indigo-200 dark:border-indigo-800">
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
-                                Групен Скор
-                              </div>
-                              <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-                                {event.group_score_pct}%
-                              </div>
-                            </div>
-
-                            <h4 className="font-bold text-lg text-gray-900 dark:text-white mb-2">
-                              {event.title}
-                            </h4>
-
-                            <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mb-3">
-                              <Calendar className="w-4 h-4 mr-2" />
-                              <span>{new Date(event.starts_at).toLocaleDateString('mk-MK')}</span>
-                            </div>
-
-                            {event.tags && event.tags.length > 0 && (
-                              <div className="flex flex-wrap gap-2">
-                                {event.tags.slice(0, 3).map((tag: string, i: number) => (
-                                  <span key={i} className="px-2 py-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 text-xs rounded-full">
-                                    {tag}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-
-                            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                                <div
-                                  className="h-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600"
-                                  style={{ width: `${event.group_score_pct}%` }}
-                                ></div>
-                              </div>
-                              <p className="text-xs text-gray-500 mt-2 text-center">
-                                Сите ќе уживаат во овој настан!
-                              </p>
-                            </div>
-                          </div>
-                        ))}
+        {activeTab === 'feed' && (
+          <div>
+            <h2 className="text-3xl font-black mb-10 text-slate-900 dark:text-white flex items-center gap-4">
+              <Activity className="w-10 h-10 text-indigo-600" />
+              Активност на пријатели
+            </h2>
+            {feed.length > 0 ? (
+              <div className="space-y-4">
+                {feed.map((item, idx) => (
+                  <GlassCard key={idx} className="p-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-indigo-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center">
+                        <User className="w-6 h-6 text-indigo-600" />
                       </div>
-                    ) : (
-                      !loading && (
-                        <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                          <Star className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                          <p className="text-gray-500 dark:text-gray-400">Нема препораки.</p>
-                          <p className="text-gray-400 text-sm mt-2">Избери повеќе пријатели или променете ги филтрите.</p>
-                        </div>
-                      )
-                    )}
-                  </div>
-                )}
+                      <div className="flex-1">
+                        <p className="text-slate-900 dark:text-white font-bold">
+                          <span className="text-indigo-600">{item.user?.name || 'Корисник'}</span>
+                          {' '}
+                          {item.action === 'liked' ? 'лајкнал' : item.action === 'attended' ? 'присуствувал на' : 'дислајкнал'}
+                          {' '}
+                          <span className="font-black">{item.event?.title || 'настан'}</span>
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1">{new Date(item.timestamp).toLocaleDateString('mk-MK')}</p>
+                      </div>
+                    </div>
+                  </GlassCard>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-32 bg-slate-50 dark:bg-slate-900/50 rounded-[3rem] border-2 border-dashed border-slate-200 dark:border-slate-800">
+                <Activity className="w-20 h-20 text-slate-200 dark:text-slate-800 mx-auto mb-6" />
+                <p className="text-slate-400 font-black uppercase tracking-widest">Нема активност од пријатели</p>
               </div>
             )}
           </div>
         )}
       </main>
 
-      {/* Profile Modal */}
-      {selectedProfileId && (
-        <UserProfileModal
-          userId={selectedProfileId}
-          onClose={() => setSelectedProfileId(null)}
-          accessToken={accessToken}
-        />
+      {showFindFriends && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+          <GlassCard className="w-full max-w-2xl p-8 relative">
+            <button
+              onClick={() => {
+                setShowFindFriends(false);
+                setSearchQuery('');
+                setSearchResults([]);
+              }}
+              className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 transition">
+              <X className="w-6 h-6" />
+            </button>
+
+            <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-6">Најди Пријатели</h2>
+
+            <div className="flex gap-3 mb-6">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSearchUsers()}
+                placeholder="Пребарај по име или email..."
+                className="flex-1 px-4 py-3 border-2 border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-indigo-500 focus:outline-none"
+              />
+              <button
+                onClick={handleSearchUsers}
+                disabled={loading}
+                className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-black hover:bg-indigo-700 transition">
+                Барај
+              </button>
+            </div>
+
+            <div className="max-h-96 overflow-y-auto space-y-3">
+              {searchResults.length > 0 ? (
+                searchResults.map((user) => (
+                  <div key={user.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-xl">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-indigo-100 dark:bg-slate-700 rounded-xl flex items-center justify-center">
+                        <User className="w-6 h-6 text-indigo-600" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-900 dark:text-white">{user.name}</p>
+                        <p className="text-xs text-slate-500">{user.email} • {user.city || 'N/A'}</p>
+                      </div>
+                    </div>
+                    {user.friendship_status === 'none' && (
+                      <button
+                        onClick={() => handleFriendRequest(user.id)}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-black hover:bg-indigo-700 transition">
+                        Додади
+                      </button>
+                    )}
+                    {user.friendship_status === 'requested' && (
+                      <span className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-lg text-sm font-black">
+                        Испратено
+                      </span>
+                    )}
+                    {user.friendship_status === 'friends' && (
+                      <span className="px-4 py-2 bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-lg text-sm font-black">
+                        Пријател
+                      </span>
+                    )}
+                  </div>
+                ))
+              ) : searchQuery ? (
+                <div className="text-center py-12 text-slate-400">
+                  Нема резултати
+                </div>
+              ) : (
+                <div className="text-center py-12 text-slate-400">
+                  Внеси име или email за пребарување
+                </div>
+              )}
+            </div>
+          </GlassCard>
+        </div>
       )}
+
+      <footer className="max-w-7xl mx-auto px-6 py-16 border-t border-slate-200 dark:border-slate-800 text-center">
+        <div className="flex justify-center items-center gap-3 mb-6">
+          <div className="w-8 h-8 bg-slate-200 dark:bg-slate-800 rounded-lg"></div>
+          <span className="text-sm font-black tracking-widest text-slate-400 uppercase">EventConnect v2.5</span>
+        </div>
+        <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">&copy; 2024 • Теодора Санева & Мартин Стаменов</p>
+      </footer>
     </div>
   );
 };

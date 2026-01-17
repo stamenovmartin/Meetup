@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🧹 Практична Data Cleaning скрипта за Event Data
+ Практична Data Cleaning скрипта за Event Data
 ================================================
 
 Специјално дизајнирана за:
@@ -43,7 +43,7 @@ class EventDataCleaner:
         dataframes = {}
 
         csv_files = list(self.data_dir.glob("*.csv"))
-        print(f"📁 Пронајдени {len(csv_files)} CSV фајлови")
+        print(f" Пронајдени {len(csv_files)} CSV фајлови")
 
         # Очекувани извори
         expected_sources = ['allevents', 'cineplexx', 'filharmonija', 'it_events', 'karti', 'mktickets']
@@ -63,26 +63,26 @@ class EventDataCleaner:
                         found_sources.append(expected)
                         break
 
-                print(f"   ✅ {file_path.name}: {len(df)} rows [{detected_source}]")
+                print(f"    {file_path.name}: {len(df)} rows [{detected_source}]")
                 self.stats['original_rows'] += len(df)
             except Exception as e:
-                print(f"   ❌ {file_path.name}: {e}")
+                print(f"    {file_path.name}: {e}")
 
         # Рапортирај за недостасувачки извори
         missing_sources = set(expected_sources) - set(found_sources)
         if missing_sources:
-            print(f"   ⚠️ Недостасуваат: {', '.join(missing_sources)}")
+            print(f"    Недостасуваат: {', '.join(missing_sources)}")
 
         return dataframes
 
     def unify_schema(self, dataframes):
         """Унифицирај schema меѓу различни извори"""
-        print("\n🔗 Унификување на schema...")
+        print("\n Унификување на schema...")
 
         unified_dfs = []
 
         for source_name, df in dataframes.items():
-            print(f"   📊 Обработувам: {source_name}")
+            print(f"    Обработувам: {source_name}")
 
             # Креирај стандардна schema
             unified_df = pd.DataFrame()
@@ -103,11 +103,11 @@ class EventDataCleaner:
             unified_df['scraped_at'] = datetime.now().strftime('%Y-%m-%d')
 
             unified_dfs.append(unified_df)
-            print(f"      ✅ Унифициран во {len(unified_df.columns)} колони")
+            print(f"       Унифициран во {len(unified_df.columns)} колони")
 
         # Спои ги сите
         combined_df = pd.concat(unified_dfs, ignore_index=True)
-        print(f"   🎯 Комбиниран dataset: {len(combined_df)} rows")
+        print(f"    Комбиниран dataset: {len(combined_df)} rows")
 
         return combined_df
 
@@ -459,22 +459,22 @@ class EventDataCleaner:
 
     def clean_data(self, df):
         """Главна функција за чистење"""
-        print("\n🧹 Чистење на податоци...")
+        print("\n Чистење на податоци...")
 
         original_count = len(df)
 
         # 1. Отстрани дупликати
-        print("   🗑️ Отстранување дупликати...")
+        print("    Отстранување дупликати...")
         duplicates_mask = df.duplicated(subset=['title', 'date_start', 'location'], keep='first')
         duplicates_count = duplicates_mask.sum()
 
         if duplicates_count > 0:
             df = df[~duplicates_mask].reset_index(drop=True)
             self.stats['duplicates_removed'] = duplicates_count
-            print(f"      ❌ Отстранети {duplicates_count} дупликати")
+            print(f"       Отстранети {duplicates_count} дупликати")
 
         # 2. Пополни празни вредности
-        print("   ✏️ Пополнување празни вредности...")
+        print("    Пополнување празни вредности...")
 
         fill_count = 0
 
@@ -515,10 +515,10 @@ class EventDataCleaner:
             fill_count += empty_times.sum()
 
         self.stats['values_filled'] = fill_count
-        print(f"      ✅ Пополнети {fill_count} празни вредности")
+        print(f"       Пополнети {fill_count} празни вредности")
 
         # 3. Стандардизирај текст
-        print("   📝 Стандардизација на текст...")
+        print("    Стандардизација на текст...")
 
         # Стандардизирај наслови (Title Case)
         df['title'] = df['title'].str.strip().str.title()
@@ -531,14 +531,14 @@ class EventDataCleaner:
         final_count = len(df)
         self.stats['final_rows'] = final_count
 
-        print(f"   📊 Финален dataset: {final_count} rows")
-        print(f"   📈 Задржани: {final_count / original_count * 100:.1f}% од оригиналните податоци")
+        print(f"    Финален dataset: {final_count} rows")
+        print(f"    Задржани: {final_count / original_count * 100:.1f}% од оригиналните податоци")
 
         return df
 
     def validate_data(self, df):
         """Валидирај ги податоците"""
-        print("\n✅ Валидација на податоци...")
+        print("\n Валидација на податоци...")
 
         issues = []
 
@@ -564,17 +564,17 @@ class EventDataCleaner:
             issues.append(f"time_start: {invalid_times} невалидни времиња")
 
         if issues:
-            print("   ⚠️ Пронајдени проблеми:")
+            print("    Пронајдени проблеми:")
             for issue in issues:
                 print(f"      - {issue}")
         else:
-            print("   ✅ Сите валидации поминати!")
+            print("    Сите валидации поминати!")
 
         return len(issues) == 0
 
     def generate_summary(self, df):
         """Генерирај резиме"""
-        print("\n📊 РЕЗИМЕ ОД ЧИСТЕЊЕТО")
+        print("\n РЕЗИМЕ ОД ЧИСТЕЊЕТО")
         print("=" * 40)
         print(f"Оригинални rows: {self.stats['original_rows']:,}")
         print(f"Финални rows: {self.stats['final_rows']:,}")
@@ -582,38 +582,38 @@ class EventDataCleaner:
         print(f"Вредности пополнети: {self.stats['values_filled']:,}")
         print(f"Успешност: {self.stats['final_rows'] / self.stats['original_rows'] * 100:.1f}%")
 
-        print(f"\n📈 ДИСТРИБУЦИЈА ПО КАТЕГОРИИ:")
+        print(f"\n ДИСТРИБУЦИЈА ПО КАТЕГОРИИ:")
         category_counts = df['category'].value_counts()
         for category, count in category_counts.head(10).items():
             print(f"   {category}: {count}")
 
-        print(f"\n📍 ТОП ЛОКАЦИИ:")
+        print(f"\n ТОП ЛОКАЦИИ:")
         location_counts = df['location'].value_counts()
         for location, count in location_counts.head(5).items():
             print(f"   {location}: {count}")
 
-        print(f"\n🏢 ТОП ОРГАНИЗАТОРИ:")
+        print(f"\n ТОП ОРГАНИЗАТОРИ:")
         organizer_counts = df['organizer'].value_counts()
         for organizer, count in organizer_counts.head(5).items():
             print(f"   {organizer}: {count}")
 
-        print(f"\n💰 ЦЕНИ:")
+        print(f"\n ЦЕНИ:")
         free_events = df['is_free'].sum()
         paid_events = len(df) - free_events
         print(f"   Бесплатни настани: {free_events}")
         print(f"   Платени настани: {paid_events}")
         if free_events > paid_events:
-            print(f"   📝 Забелешка: Настани без позната цена се третираат како бесплатни")
+            print(f"    Забелешка: Настани без позната цена се третираат како бесплатни")
 
     def run_full_cleaning(self):
         """Изврши целосно чистење"""
-        print("🚀 СТАРТУВАЊЕ НА DATA CLEANING ПРОЦЕС")
+        print(" СТАРТУВАЊЕ НА DATA CLEANING ПРОЦЕС")
         print("=" * 50)
 
         # 1. Вчитај податоци
         dataframes = self.load_all_csvs()
         if not dataframes:
-            print("❌ Нема податоци за обработка!")
+            print(" Нема податоци за обработка!")
             return None
 
         # 2. Унифицирај schema
@@ -628,7 +628,7 @@ class EventDataCleaner:
         # 5. Зачувај
         output_file = self.output_dir / f"events_cleaned_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         cleaned_df.to_csv(output_file, index=False, encoding='utf-8-sig')
-        print(f"\n💾 Зачуван во: {output_file}")
+        print(f"\n Зачуван во: {output_file}")
 
         # 6. Резиме
         self.generate_summary(cleaned_df)
@@ -639,10 +639,10 @@ class EventDataCleaner:
         # Додај уникатни ID-ja
         cleaned_df['node_id'] = range(len(cleaned_df))
         cleaned_df.to_csv(gnn_file, index=False, encoding='utf-8-sig')
-        print(f"📊 GNN-ready dataset: {gnn_file}")
+        print(f" GNN-ready dataset: {gnn_file}")
 
-        print(f"\n🎉 DATA CLEANING ЗАВРШЕН УСПЕШНО!")
-        print(f"📁 Провери ја папката 'cleaned_data' за резултати")
+        print(f"\n DATA CLEANING ЗАВРШЕН УСПЕШНО!")
+        print(f" Провери ја папката 'cleaned_data' за резултати")
 
         return cleaned_df
 
@@ -654,14 +654,14 @@ def main():
         result = cleaner.run_full_cleaning()
 
         if result is not None:
-            print("\n✅ Процесот завршен успешно!")
-            print("📋 Наредни чекори:")
+            print("\n Процесот завршен успешно!")
+            print(" Наредни чекори:")
             print("   1. Провери го cleaned dataset")
             print("   2. Започни со graph construction")
             print("   3. Развивај GNN модели")
 
     except Exception as e:
-        print(f"❌ Грешка: {e}")
+        print(f" Грешка: {e}")
         import traceback
         traceback.print_exc()
 

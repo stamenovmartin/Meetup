@@ -86,7 +86,7 @@ class EventGraphSAGE(nn.Module):
 
 class GNNTrainer:
 
-    def __init__(self, graph_data_dir="../graph_construction/graph_data", output_dir="gnn_results"):
+    def __init__(self, graph_data_dir="graph_construction/graph_data", output_dir="gnn_results"):
         self.graph_data_dir = Path(graph_data_dir)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
@@ -95,8 +95,8 @@ class GNNTrainer:
         self.models = {}
         self.results = {}
 
-        print(f"📂 Graph data dir: {self.graph_data_dir.absolute()}")
-        print(f"📁 Output dir: {self.output_dir.absolute()}")
+        print(f"Graph data dir: {self.graph_data_dir.absolute()}")
+        print(f"Output dir: {self.output_dir.absolute()}")
 
         self.load_metadata()
 
@@ -105,24 +105,24 @@ class GNNTrainer:
         if metadata_file.exists():
             with open(metadata_file, 'r', encoding='utf-8') as f:
                 self.metadata = json.load(f)
-            print(f"✅ Метаподатоци вчитани: {len(self.metadata.get('graphs_created', []))} графови")
+            print(f" Метаподатоци вчитани: {len(self.metadata.get('graphs_created', []))} графови")
         else:
-            print("⚠️ Нема метаподатоци, користам default вредности")
+            print(" Нема метаподатоци, користам default вредности")
             self.metadata = {}
 
     def load_graphs(self):
-        print("📂 Вчитување графови...")
+        print(" Вчитување графови...")
 
         if not self.graph_data_dir.exists():
-            print(f"❌ Папката не постои: {self.graph_data_dir}")
+            print(f" Папката не постои: {self.graph_data_dir}")
             return False
 
         graph_files = list(self.graph_data_dir.glob("*_graph.pt"))
 
         if not graph_files:
-            print("❌ Нема .pt фајлови во graph_data папката!")
-            print(f"🔍 Проверувам папка: {self.graph_data_dir}")
-            print("📋 Содржина:")
+            print(" Нема .pt фајлови во graph_data папката!")
+            print(f" Проверувам папка: {self.graph_data_dir}")
+            print(" Содржина:")
             for item in self.graph_data_dir.iterdir():
                 print(f"   - {item.name}")
             return False
@@ -132,7 +132,7 @@ class GNNTrainer:
             try:
                 graph = torch.load(graph_file, map_location='cpu', weights_only=False)
                 self.graphs[graph_name] = graph
-                print(f"   ✅ {graph_name}: {type(graph).__name__}")
+                print(f"    {graph_name}: {type(graph).__name__}")
 
                 if hasattr(graph, 'x') and hasattr(graph, 'edge_index'):
                     print(f"      Nodes: {graph.x.shape[0]}, Features: {graph.x.shape[1]}")
@@ -142,36 +142,112 @@ class GNNTrainer:
                         print(f"      Edges: 0 (само nodes)")
 
             except Exception as e:
-                print(f"   ❌ Проблем со {graph_name}: {e}")
+                print(f"    Проблем со {graph_name}: {e}")
 
         return len(self.graphs) > 0
 
     def prepare_node_classification_data(self, graph_name="event_similarity"):
-        print(f"🎯 Подготовка за node classification ({graph_name})...")
+        print(f" Подготовка за node classification ({graph_name})...")
 
         if graph_name not in self.graphs:
-            print(f"❌ Графот {graph_name} не постои!")
+            print(f" Графот {graph_name} не постои!")
             available_graphs = list(self.graphs.keys())
-            print(f"📋 Достапни графови: {available_graphs}")
+            print(f" Достапни графови: {available_graphs}")
             if available_graphs:
                 graph_name = available_graphs[0]
-                print(f"🔄 Користам {graph_name} наместо тоа")
+                print(f" Користам {graph_name} наместо тоа")
             else:
                 return None
 
         graph = self.graphs[graph_name]
 
+        # Handle dict format with embeddings (from graph_construction.py)
+        if isinstance(graph, dict):
+            from torch_geometric.data import Data
+            print(f"    Converting dict to PyG Data object...")
+            print(f"    Dict keys: {list(graph.keys())}")
+
+            # Check if this is an embeddings-only dict
+            if 'embeddings' in graph and 'event_ids' in graph:
+                print(f"   ℹ This is an embeddings dict, creating graph from embeddings...")
+                embeddings = graph['embeddings']
+                if isinstance(embeddings, np.ndarray):
+                    embeddings = torch.tensor(embeddings, dtype=torch.float)
+
+                # Create edges based on cosine similarity
+                from sklearn.metrics.pairwise import cosine_similarity
+                print(f"    Creating edges based on embedding similarity...")
+
+                # Compute cosine similarity
+                emb_np = embeddings.numpy() if isinstance(embeddings, torch.Tensor) else embeddings
+                similarity_matrix = cosine_similarity(emb_np)
+
+                # Create edges for top-k similar nodes (k=10)
+                k = min(10, len(emb_np) - 1)
+                edge_list = []
+                for i in range(len(emb_np)):
+                    # Get top-k most similar nodes (excluding self)
+                    similarities = similarity_matrix[i]
+                    similarities[i] = -1  # Exclude self
+                    top_k_indices = np.argsort(similarities)[-k:]
+
+                    for j in top_k_indices:
+                        if similarities[j] > 0.5:  # Only add if similarity > 0.5
+                            edge_list.append([i, j])
+
+                if edge_list:
+                    edge_index = torch.tensor(edge_list, dtype=torch.long).t()
+                else:
+                    edge_index = torch.zeros((2, 0), dtype=torch.long)
+
+                # Create a simple graph: nodes with embeddings + similarity-based edges
+                graph = Data(
+                    x=embeddings,
+                    edge_index=edge_index,
+                    num_nodes=embeddings.shape[0]
+                )
+                print(f"    Created graph with {graph.num_nodes} nodes, {embeddings.shape[1]} features, {edge_index.shape[1]} edges")
+                self.graphs[graph_name] = graph
+
+            elif 'x' in graph and 'edge_index' in graph:
+                # Standard PyG dict format
+                graph = Data(
+                    x=graph['x'],
+                    edge_index=graph['edge_index'],
+                    edge_attr=graph.get('edge_attr', None)
+                )
+                self.graphs[graph_name] = graph
+            else:
+                print(f"    Dict missing required keys! Has: {list(graph.keys())}")
+                return None
+
+        # Validate graph has required attributes
+        if not hasattr(graph, 'x') or graph.x is None:
+            print(f"    Graph has no 'x' attribute or it's None!")
+            print(f"    Graph type: {type(graph)}")
+            print(f"    Graph attributes: {[attr for attr in dir(graph) if not attr.startswith('_')]}")
+            return None
+
         num_nodes = graph.x.shape[0]
 
-        features = graph.x.numpy()
+        features = graph.x.numpy() if isinstance(graph.x, torch.Tensor) else graph.x
 
-        if features.shape[1] > 10:  # Ако имаме TF-IDF features
+        # Use real category labels if available from graph metadata
+        if hasattr(graph, 'category_labels') and graph.category_labels is not None:
+            from sklearn.preprocessing import LabelEncoder
+            le = LabelEncoder()
+            labels = le.fit_transform(graph.category_labels)
+            print(f"    Using real category labels: {len(np.unique(labels))} classes")
+        elif features.shape[1] > 10:  # Ако имаме TF-IDF features
             from sklearn.cluster import KMeans
             n_clusters = min(5, max(2, num_nodes // 10))  # 2-5 кластери
             kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
             labels = kmeans.fit_predict(features)
+            print(f"   ℹ Using KMeans clustering: {n_clusters} clusters")
         else:
-            labels = np.random.randint(0, 3, size=num_nodes)
+            # Last resort: use simple heuristic based on features
+            labels = (features.sum(axis=1) % 3).astype(int)
+            print(f"    Using feature-based labels: 3 classes")
 
         train_mask = torch.zeros(num_nodes, dtype=torch.bool)
         test_mask = torch.zeros(num_nodes, dtype=torch.bool)
@@ -190,14 +266,14 @@ class GNNTrainer:
         graph.val_mask = val_mask
         graph.test_mask = test_mask
 
-        print(f"   ✅ Labels: {len(np.unique(labels))} класи")
-        print(f"   ✅ Train: {train_mask.sum()}, Val: {val_mask.sum()}, Test: {test_mask.sum()}")
+        print(f"    Labels: {len(np.unique(labels))} класи")
+        print(f"    Train: {train_mask.sum()}, Val: {val_mask.sum()}, Test: {test_mask.sum()}")
 
         return graph
 
     def train_node_classification(self, graph_name="event_similarity", model_type="GCN"):
         """Тренирај модел за node classification"""
-        print(f"🚀 Тренирање {model_type} за node classification...")
+        print(f" Тренирање {model_type} за node classification...")
 
         graph = self.prepare_node_classification_data(graph_name)
         if graph is None:
@@ -213,7 +289,7 @@ class GNNTrainer:
         elif model_type == "GraphSAGE":
             model = EventGraphSAGE(input_dim, hidden_dim=64, output_dim=num_classes)
         else:
-            print(f"❌ Непознат model type: {model_type}")
+            print(f" Непознат model type: {model_type}")
             return None
 
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
@@ -263,8 +339,8 @@ class GNNTrainer:
             'val_accuracies': val_accuracies
         }
 
-        print(f"   ✅ Test Accuracy: {test_acc:.4f}")
-        print(f"   ✅ Test F1: {test_f1:.4f}")
+        print(f"    Test Accuracy: {test_acc:.4f}")
+        print(f"    Test F1: {test_f1:.4f}")
 
         model_key = f"{model_type}_{graph_name}"
         self.models[model_key] = model
@@ -273,21 +349,21 @@ class GNNTrainer:
         return results
 
     def train_link_prediction(self, graph_name="event_similarity"):
-        print(f"🔗 Тренирање за link prediction ({graph_name})...")
+        print(f" Тренирање за link prediction ({graph_name})...")
 
         if graph_name not in self.graphs:
             available_graphs = list(self.graphs.keys())
             if available_graphs:
                 graph_name = available_graphs[0]
-                print(f"🔄 Користам {graph_name} наместо event_similarity")
+                print(f" Користам {graph_name} наместо event_similarity")
             else:
-                print("❌ Нема достапни графови!")
+                print(" Нема достапни графови!")
                 return None
 
         graph = self.graphs[graph_name]
 
         if not hasattr(graph, 'edge_index') or graph.edge_index.shape[1] == 0:
-            print("❌ Графот нема edges за link prediction!")
+            print(" Графот нема edges за link prediction!")
             return None
 
         data = train_test_split_edges(graph, val_ratio=0.1, test_ratio=0.2)
@@ -341,16 +417,16 @@ class GNNTrainer:
             'embeddings': z.detach().cpu().numpy()
         }
 
-        print(f"   ✅ Test AUC: {test_auc:.4f}")
+        print(f"    Test AUC: {test_auc:.4f}")
 
         self.results[f"LinkPred_{graph_name}"] = results
         return results
 
     def visualize_results(self):
-        print("🎨 Визуализација на резултати...")
+        print(" Визуализација на резултати...")
 
         if not self.results:
-            print("❌ Нема резултати за визуализација!")
+            print(" Нема резултати за визуализација!")
             return
 
         fig, axes = plt.subplots(2, 2, figsize=(15, 10))
@@ -368,7 +444,7 @@ class GNNTrainer:
             axes[0, 0].bar([i - width / 2 for i in x], accuracies, width, label='Accuracy', alpha=0.8)
             axes[0, 0].bar([i + width / 2 for i in x], f1_scores, width, label='F1-Score', alpha=0.8)
             axes[0, 0].set_ylabel('Score')
-            axes[0, 0].set_title('🎯 Node Classification Performance')
+            axes[0, 0].set_title(' Node Classification Performance')
             axes[0, 0].set_xticks(x)
             axes[0, 0].set_xticklabels([m.replace('_', '\n') for m in models], rotation=45)
             axes[0, 0].legend()
@@ -380,7 +456,7 @@ class GNNTrainer:
             axes[0, 1].plot(losses, label='Training Loss')
             axes[0, 1].set_xlabel('Epoch')
             axes[0, 1].set_ylabel('Loss')
-            axes[0, 1].set_title('📈 Training Progress')
+            axes[0, 1].set_title(' Training Progress')
             axes[0, 1].legend()
             axes[0, 1].grid(True, alpha=0.3)
 
@@ -392,7 +468,7 @@ class GNNTrainer:
 
             axes[1, 0].bar(range(len(models)), aucs, alpha=0.8, color='green')
             axes[1, 0].set_ylabel('AUC Score')
-            axes[1, 0].set_title('🔗 Link Prediction Performance')
+            axes[1, 0].set_title(' Link Prediction Performance')
             axes[1, 0].set_xticks(range(len(models)))
             axes[1, 0].set_xticklabels([m.replace('_', '\n') for m in models])
             axes[1, 0].grid(True, alpha=0.3)
@@ -402,17 +478,17 @@ class GNNTrainer:
         avg_auc = np.mean([r['test_auc'] for r in link_pred_results.values()]) if link_pred_results else 0
 
         summary_text = f"""
-        📊 РЕЗУЛТАТИ РЕЗИМЕ
+         РЕЗУЛТАТИ РЕЗИМЕ
 
-        🧠 Модели тренирани: {total_models}
+         Модели тренирани: {total_models}
 
-        🎯 Node Classification:
+         Node Classification:
         • Просечна точност: {avg_accuracy:.3f}
 
-        🔗 Link Prediction:
+         Link Prediction:
         • Просечен AUC: {avg_auc:.3f}
 
-        📈 Графови анализирани:
+         Графови анализирани:
         {', '.join(set(r.get('graph_name', 'unknown') for r in self.results.values()))}
         """
 
@@ -427,10 +503,10 @@ class GNNTrainer:
         plt.savefig(self.output_dir / 'gnn_training_results.png', dpi=200, bbox_inches='tight')
         plt.close()
 
-        print(f"   ✅ Резултати зачувани во: {self.output_dir}")
+        print(f"    Резултати зачувани во: {self.output_dir}")
 
     def save_results(self):
-        print("💾 Зачувување модели и резултати...")
+        print(" Зачувување модели и резултати...")
 
         models_dir = self.output_dir / "models"
         models_dir.mkdir(exist_ok=True)
@@ -438,7 +514,7 @@ class GNNTrainer:
         for model_name, model in self.models.items():
             model_path = models_dir / f"{model_name}.pt"
             torch.save(model.state_dict(), model_path)
-            print(f"   ✅ {model_name}.pt")
+            print(f"    {model_name}.pt")
 
         results_clean = {}
         for key, result in self.results.items():
@@ -449,19 +525,19 @@ class GNNTrainer:
         with open(self.output_dir / 'training_results.json', 'w', encoding='utf-8') as f:
             json.dump(results_clean, f, indent=2, ensure_ascii=False)
 
-        print(f"   ✅ training_results.json")
-        print(f"💾 Сè зачувано во: {self.output_dir}")
+        print(f"    training_results.json")
+        print(f" Сè зачувано во: {self.output_dir}")
 
     def run_full_training(self):
         """Главна функција за тренирање"""
-        print("🧠 GNN Training System")
+        print(" GNN Training System")
         print("=" * 50)
 
         if not self.load_graphs():
-            print("❌ Не можам да ги вчитам графовите!")
+            print(" Не можам да ги вчитам графовите!")
             return False
 
-        print("\n🎯 NODE CLASSIFICATION")
+        print("\n NODE CLASSIFICATION")
         print("-" * 30)
 
         available_graphs = list(self.graphs.keys())
@@ -471,20 +547,20 @@ class GNNTrainer:
             try:
                 self.train_node_classification(target_graph, model_type)
             except Exception as e:
-                print(f"❌ Проблем со {model_type}: {e}")
+                print(f" Проблем со {model_type}: {e}")
 
-        print("\n🔗 LINK PREDICTION")
+        print("\n LINK PREDICTION")
         print("-" * 30)
 
         try:
             self.train_link_prediction(target_graph)
         except Exception as e:
-            print(f"❌ Проблем со link prediction: {e}")
+            print(f" Проблем со link prediction: {e}")
 
         self.visualize_results()
         self.save_results()
 
-        print("\n🎉 GNN Training завршен!")
+        print("\n GNN Training завршен!")
         return True
 
 
@@ -493,11 +569,11 @@ def main():
     success = trainer.run_full_training()
 
     if success:
-        print("\n✅ Сè готово! Провери ја 'gnn_results' папката за:")
-        print("   📊 training_results.json - детални резултати")
-        print("   🧠 models/ - тренирани модели")
-        print("   🎨 gnn_training_results.png - визуализации")
-        print("\n💡 Следен чекор: Експериментирај со различни hyperparameters!")
+        print("\n Сè готово! Провери ја 'gnn_results' папката за:")
+        print("    training_results.json - детални резултати")
+        print("    models/ - тренирани модели")
+        print("    gnn_training_results.png - визуализации")
+        print("\n Следен чекор: Експериментирај со различни hyperparameters!")
 
     return success
 

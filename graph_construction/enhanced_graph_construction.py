@@ -59,15 +59,15 @@ class EnhancedGraphConstructor:
                 if not csv_files:
                     csv_files = sorted(path.glob("events_cleaned_*.csv"))
                 if csv_files:
-                    logger.info(f"✅ Found data: {csv_files[-1]}")
+                    logger.info(f" Found data: {csv_files[-1]}")
                     return str(csv_files[-1])
 
-        logger.error("❌ No cleaned data found!")
+        logger.error(" No cleaned data found!")
         return None
 
     def load_data(self):
         """Load and preprocess event data"""
-        logger.info("📂 Loading event data...")
+        logger.info(" Loading event data...")
 
         if not self.data_path:
             logger.error("No data path specified!")
@@ -75,7 +75,7 @@ class EnhancedGraphConstructor:
 
         try:
             self.df = pd.read_csv(self.data_path, encoding='utf-8-sig')
-            logger.info(f"✅ Loaded {len(self.df)} events")
+            logger.info(f" Loaded {len(self.df)} events")
 
             # Add node IDs
             if 'node_id' not in self.df.columns:
@@ -91,7 +91,7 @@ class EnhancedGraphConstructor:
             return True
 
         except Exception as e:
-            logger.error(f"❌ Error loading data: {e}")
+            logger.error(f" Error loading data: {e}")
             return False
 
     def create_temporal_edges(self, threshold_days=7):
@@ -102,7 +102,7 @@ class EnhancedGraphConstructor:
         - Same month: weight 0.5
         - Same season: weight 0.3
         """
-        logger.info("⏰ Creating temporal edges...")
+        logger.info(" Creating temporal edges...")
 
         edges = []
         weights = []
@@ -137,7 +137,7 @@ class EnhancedGraphConstructor:
                     edges.append([i, j])
                     weights.append(edge_weight)
 
-        logger.info(f"   ✅ Created {len(edges)} temporal edges")
+        logger.info(f"    Created {len(edges)} temporal edges")
         return edges, weights
 
     def create_thematic_edges(self, similarity_threshold=0.15):
@@ -147,7 +147,7 @@ class EnhancedGraphConstructor:
         - Tag/keyword overlap
         - Description TF-IDF similarity
         """
-        logger.info("🎯 Creating thematic edges...")
+        logger.info(" Creating thematic edges...")
 
         # Combine text features
         combined_text = self.df['title'].fillna('') + ' ' + \
@@ -177,7 +177,7 @@ class EnhancedGraphConstructor:
                     edges.append([i, j])
                     weights.append(float(similarity))
 
-        logger.info(f"   ✅ Created {len(edges)} thematic edges")
+        logger.info(f"    Created {len(edges)} thematic edges")
         return edges, weights
 
     def create_location_edges(self):
@@ -186,13 +186,13 @@ class EnhancedGraphConstructor:
         - Same venue: weight 1.0
         - Same city: weight 0.6
         """
-        logger.info("📍 Creating location edges...")
+        logger.info(" Creating location edges...")
 
         edges = []
         weights = []
 
         if 'location' not in self.df.columns:
-            logger.warning("   ⚠️ No location column found")
+            logger.warning("    No location column found")
             return edges, weights
 
         for i in range(len(self.df)):
@@ -213,7 +213,7 @@ class EnhancedGraphConstructor:
                     edges.append([i, j])
                     weights.append(weight)
 
-        logger.info(f"   ✅ Created {len(edges)} location edges")
+        logger.info(f"    Created {len(edges)} location edges")
         return edges, weights
 
     def create_organizer_edges(self):
@@ -221,13 +221,13 @@ class EnhancedGraphConstructor:
         Create organizer-based edges:
         - Same organizer: weight 1.0
         """
-        logger.info("🏢 Creating organizer edges...")
+        logger.info(" Creating organizer edges...")
 
         edges = []
         weights = []
 
         if 'organizer' not in self.df.columns:
-            logger.warning("   ⚠️ No organizer column found")
+            logger.warning("    No organizer column found")
             return edges, weights
 
         for i in range(len(self.df)):
@@ -239,12 +239,12 @@ class EnhancedGraphConstructor:
                     edges.append([i, j])
                     weights.append(1.0)
 
-        logger.info(f"   ✅ Created {len(edges)} organizer edges")
+        logger.info(f"    Created {len(edges)} organizer edges")
         return edges, weights
 
     def prepare_node_features(self):
         """Prepare comprehensive node features"""
-        logger.info("🎯 Preparing node features...")
+        logger.info(" Preparing node features...")
 
         features = []
 
@@ -279,12 +279,12 @@ class EnhancedGraphConstructor:
         scaler = StandardScaler()
         all_features = scaler.fit_transform(all_features)
 
-        logger.info(f"   ✅ Feature shape: {all_features.shape}")
+        logger.info(f"    Feature shape: {all_features.shape}")
         return torch.tensor(all_features, dtype=torch.float)
 
     def create_multi_dimensional_graph(self):
         """Create enhanced multi-dimensional graph"""
-        logger.info("🌐 Creating multi-dimensional graph...")
+        logger.info(" Creating multi-dimensional graph...")
 
         # Get all edge types
         temporal_edges, temporal_weights = self.create_temporal_edges()
@@ -323,7 +323,7 @@ class EnhancedGraphConstructor:
 
         # Create PyTorch Geometric Data object
         if len(all_edges) == 0:
-            logger.warning("⚠️ No edges created!")
+            logger.warning(" No edges created!")
             edge_index = torch.zeros((2, 0), dtype=torch.long)
             edge_attr = torch.zeros((0, 2), dtype=torch.float)
         else:
@@ -345,8 +345,8 @@ class EnhancedGraphConstructor:
             num_nodes=len(self.df)
         )
 
-        logger.info(f"   ✅ Graph created: {data.num_nodes} nodes, {edge_index.shape[1]} edges")
-        logger.info(f"   📊 Edge distribution:")
+        logger.info(f"    Graph created: {data.num_nodes} nodes, {edge_index.shape[1]} edges")
+        logger.info(f"    Edge distribution:")
         logger.info(f"      - Temporal: {len(temporal_edges)}")
         logger.info(f"      - Thematic: {len(thematic_edges)}")
         logger.info(f"      - Location: {len(location_edges)}")
@@ -358,7 +358,7 @@ class EnhancedGraphConstructor:
         """Save graph to file"""
         output_path = self.output_dir / f"{name}.pt"
         torch.save(graph, output_path)
-        logger.info(f"💾 Saved graph to: {output_path}")
+        logger.info(f" Saved graph to: {output_path}")
 
         # Save metadata
         metadata = {
@@ -378,11 +378,11 @@ class EnhancedGraphConstructor:
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
 
-        logger.info(f"📄 Saved metadata to: {metadata_path}")
+        logger.info(f" Saved metadata to: {metadata_path}")
 
     def run(self):
         """Run the complete graph construction pipeline"""
-        logger.info("🚀 Enhanced Graph Construction Pipeline")
+        logger.info(" Enhanced Graph Construction Pipeline")
         logger.info("=" * 60)
 
         # Load data
@@ -395,8 +395,8 @@ class EnhancedGraphConstructor:
         # Save graph
         self.save_graph(graph)
 
-        logger.info("\n✅ Graph construction completed successfully!")
-        logger.info(f"📁 Output directory: {self.output_dir}")
+        logger.info("\n Graph construction completed successfully!")
+        logger.info(f" Output directory: {self.output_dir}")
 
         return True
 
@@ -407,13 +407,13 @@ def main():
     success = constructor.run()
 
     if success:
-        print("\n🎉 Enhanced graph construction completed!")
-        print("📋 Next steps:")
+        print("\n Enhanced graph construction completed!")
+        print(" Next steps:")
         print("   1. Use the generated .pt file for GNN training")
         print("   2. Train GraphSAGE, GCN, or GAT models")
         print("   3. Evaluate recommendations")
     else:
-        print("\n❌ Graph construction failed!")
+        print("\n Graph construction failed!")
         print("Please check the logs above for errors.")
 
 

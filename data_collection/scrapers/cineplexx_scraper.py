@@ -8,6 +8,8 @@ import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 import os
 import glob
 import hashlib
@@ -49,7 +51,8 @@ class CineplexxScraper:
         chrome_options.add_argument(
             "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-        self.driver = webdriver.Chrome(options=chrome_options)
+        service = Service(ChromeDriverManager().install())
+        self.driver = webdriver.Chrome(service=service, options=chrome_options)
         self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         self.driver.set_page_load_timeout(30)
 
@@ -121,26 +124,26 @@ class CineplexxScraper:
                 for i, elem in enumerate(all_duration_elements):
                     text = elem.text.strip()
                     html = elem.get_attribute('innerHTML')
-                    print(f"    🔍 Елемент {i + 1}: text='{text}', html='{html}'")
+                    print(f"     Елемент {i + 1}: text='{text}', html='{html}'")
 
                     if text:
                         details['duration'] = text
-                        print(f"    ⏱️ Времетраење УСПЕШНО од елемент {i + 1}: {details['duration']}")
+                        print(f"    ⏱ Времетраење УСПЕШНО од елемент {i + 1}: {details['duration']}")
                         break
 
                 if not details['duration']:
-                    print(f"    🔍 Нема текст во duration елементи, чекам 5 сек повеќе...")
+                    print(f"     Нема текст во duration елементи, чекам 5 сек повеќе...")
                     time.sleep(5)
 
                     duration_element = self.driver.find_element(By.CSS_SELECTOR, ".b-title-with-poster__duration")
                     if duration_element:
                         text = duration_element.text.strip()
                         html = duration_element.get_attribute('innerHTML')
-                        print(f"    🔍 После чекање: text='{text}', html='{html}'")
+                        print(f"     После чекање: text='{text}', html='{html}'")
 
                         if text:
                             details['duration'] = text
-                            print(f"    ⏱️ Времетраење е УСПЕШНО после чекање: {details['duration']}")
+                            print(f"    ⏱ Времетраење е УСПЕШНО после чекање: {details['duration']}")
 
             except Exception as e:
                 print(f"Грешка во duration debugging: {e}")
@@ -260,7 +263,7 @@ class CineplexxScraper:
         detailed_movies = []
 
         for i, movie in enumerate(unique_basic_movies):
-            print(f"\n🎭 {i + 1}/{len(unique_basic_movies)} - {movie['title']}")
+            print(f"\n {i + 1}/{len(unique_basic_movies)} - {movie['title']}")
 
             if movie['url'] != self.base_url and '/film/' in movie['url']:
                 try:
@@ -388,7 +391,7 @@ class CineplexxScraper:
             except Exception as e:
                 continue
 
-        print(f"   ✅ {source_name}: {len(movies)} филмови")
+        print(f"    {source_name}: {len(movies)} филмови")
         return movies
 
     def save_data(self, movies: List[Dict]):

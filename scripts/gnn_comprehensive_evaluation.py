@@ -430,14 +430,14 @@ class GNNEvaluator:
 
         if np.all(improvements == 0):
             # No difference between systems
-            print("  ⚠️ Full system and baseline have identical performance (no GNN effect)")
+            print("   Full system and baseline have identical performance (no GNN effect)")
             return 0, 1.0, (0, 0)
 
         # Wilcoxon test
         try:
             statistic, p_value = stats.wilcoxon(full_precisions, baseline_precisions, alternative='greater')
         except ValueError as e:
-            print(f"  ⚠️ Wilcoxon test failed: {e}")
+            print(f"   Wilcoxon test failed: {e}")
             return None, None, None
 
         # Bootstrap 95% CI
@@ -457,7 +457,7 @@ def generate_comprehensive_report(user_ids=[1], output_dir='docs/analytics/gnn_e
     os.makedirs(output_dir, exist_ok=True)
 
     print("=" * 80)
-    print("🚀 GNN COMPREHENSIVE EVALUATION")
+    print(" GNN COMPREHENSIVE EVALUATION")
     print("=" * 80)
 
     app = create_app()
@@ -468,7 +468,7 @@ def generate_comprehensive_report(user_ids=[1], output_dir='docs/analytics/gnn_e
         all_results = {}
 
         for user_id in user_ids:
-            print(f"\n📊 Evaluating User {user_id}...")
+            print(f"\n Evaluating User {user_id}...")
 
             # 1. Ranking metrics
             print("  • Computing Precision/Recall/HitRate@k...")
@@ -511,16 +511,16 @@ def generate_comprehensive_report(user_ids=[1], output_dir='docs/analytics/gnn_e
 
         # Statistical significance test
         if len(user_ids) > 1:
-            print("\n📈 Running Statistical Significance Test...")
+            print("\n Running Statistical Significance Test...")
             stat, pval, ci = evaluator.statistical_significance_test(user_ids)
             all_results['significance'] = {'statistic': stat, 'p_value': pval, 'ci': ci}
 
         # Visualizations
-        print("\n🎨 Generating Visualizations...")
+        print("\n Generating Visualizations...")
         plot_comprehensive_metrics(all_results, output_dir)
 
-        print("\n✅ Evaluation Complete!")
-        print(f"📂 Results saved to: {output_dir}")
+        print("\n Evaluation Complete!")
+        print(f" Results saved to: {output_dir}")
         print("=" * 80)
 
         return all_results
@@ -540,7 +540,7 @@ def plot_comprehensive_metrics(results, output_dir):
     # Земи првиот user за demo (или просек за повеќе users)
     user_ids = [k for k in results.keys() if k != 'significance']
     if not user_ids:
-        print("⚠️ No user results to plot!")
+        print(" No user results to plot!")
         return
 
     sample_user_id = user_ids[0]
@@ -588,7 +588,7 @@ def plot_comprehensive_metrics(results, output_dir):
     plt.tight_layout()
     plt.savefig(f"{output_dir}/01_ranking_metrics.png", dpi=200, bbox_inches='tight')
     plt.close()
-    print("  ✅ 01_ranking_metrics.png")
+    print("   01_ranking_metrics.png")
 
     # 2. ROC & PR Curves
     roc_pr_results = results[sample_user_id]['roc_pr']
@@ -617,7 +617,7 @@ def plot_comprehensive_metrics(results, output_dir):
         plt.tight_layout()
         plt.savefig(f"{output_dir}/02_roc_pr_curves.png", dpi=200, bbox_inches='tight')
         plt.close()
-        print("  ✅ 02_roc_pr_curves.png")
+        print("   02_roc_pr_curves.png")
 
     # 3. Calibration Plot
     calibration_results = results[sample_user_id]['calibration']
@@ -647,7 +647,7 @@ def plot_comprehensive_metrics(results, output_dir):
         plt.tight_layout()
         plt.savefig(f"{output_dir}/03_calibration.png", dpi=200, bbox_inches='tight')
         plt.close()
-        print("  ✅ 03_calibration.png")
+        print("   03_calibration.png")
 
     # 4. Ablation Study
     ablation_results = results[sample_user_id]['ablation']
@@ -677,7 +677,7 @@ def plot_comprehensive_metrics(results, output_dir):
         plt.tight_layout()
         plt.savefig(f"{output_dir}/04_ablation_study.png", dpi=200, bbox_inches='tight')
         plt.close()
-        print("  ✅ 04_ablation_study.png")
+        print("   04_ablation_study.png")
 
     # 5. Summary Metrics Table
     fig5, ax5 = plt.subplots(figsize=(12, 8))
@@ -685,7 +685,7 @@ def plot_comprehensive_metrics(results, output_dir):
 
     summary_data = []
     summary_data.append(['Metric', 'Value'])
-    summary_data.append(['─' * 30, '─' * 20])
+    summary_data.append(['-' * 30, '-' * 20])
 
     # Ranking metrics
     summary_data.append(['Precision@10', f"{ranking_metrics[10]['precision']:.3f}"])
@@ -703,14 +703,14 @@ def plot_comprehensive_metrics(results, output_dir):
         summary_data.append(['ECE', f"{calibration_results[0]:.3f}"])
 
     if ablation_results:
-        summary_data.append(['─' * 30, '─' * 20])
+        summary_data.append(['-' * 30, '-' * 20])
         summary_data.append(['Full System P@20', f"{ablation_results['full_system']:.3f}"])
         summary_data.append(['Traditional P@20', f"{ablation_results['traditional_only']:.3f}"])
         summary_data.append(['GNN Contribution', f"{ablation_results['gnn_contribution']:.3f}"])
 
     diversity_results = results[sample_user_id]['diversity']
     if diversity_results:
-        summary_data.append(['─' * 30, '─' * 20])
+        summary_data.append(['-' * 30, '-' * 20])
         summary_data.append(['Tag Diversity', f"{diversity_results['tag_diversity']:.3f}"])
         summary_data.append(['Score STD', f"{diversity_results['score_std']:.2f}"])
         summary_data.append(['Score Range', f"{diversity_results['score_range']:.2f}"])
@@ -718,7 +718,7 @@ def plot_comprehensive_metrics(results, output_dir):
     # Statistical significance
     if 'significance' in results and results['significance']['p_value'] is not None:
         sig = results['significance']
-        summary_data.append(['─' * 30, '─' * 20])
+        summary_data.append(['-' * 30, '-' * 20])
         summary_data.append(['Wilcoxon p-value', f"{sig['p_value']:.4f}"])
         summary_data.append(['95% CI', f"[{sig['ci'][0]:.3f}, {sig['ci'][1]:.3f}]"])
 
@@ -736,7 +736,7 @@ def plot_comprehensive_metrics(results, output_dir):
     # Style rows
     for i in range(1, len(summary_data)):
         for j in range(2):
-            if '─' in summary_data[i][0]:
+            if summary_data[i][0].startswith('-'):
                 table[(i, j)].set_facecolor('#E5E5E5')
             elif i % 2 == 0:
                 table[(i, j)].set_facecolor('#F5F5F5')
@@ -747,7 +747,7 @@ def plot_comprehensive_metrics(results, output_dir):
     plt.tight_layout()
     plt.savefig(f"{output_dir}/05_summary_metrics.png", dpi=200, bbox_inches='tight')
     plt.close()
-    print("  ✅ 05_summary_metrics.png")
+    print("   05_summary_metrics.png")
 
 
 if __name__ == '__main__':

@@ -69,7 +69,7 @@ def compare_configurations():
     """Спореди различни alpha конфигурации"""
 
     print("=" * 80)
-    print("🔬 ALPHA COMPARISON - Traditional vs GNN Balance")
+    print(" ALPHA COMPARISON - Traditional vs GNN Balance")
     print("=" * 80)
 
     app = create_app()
@@ -78,8 +78,8 @@ def compare_configurations():
         # Test users (synthetic users со многу интеракции)
         user_ids = [3, 4, 5, 6, 7, 8, 9, 10]
 
-        print(f"\n📊 Testing on {len(user_ids)} users")
-        print(f"📏 Metric: Precision@20\n")
+        print(f"\n Testing on {len(user_ids)} users")
+        print(f"Metric: Precision@20\n")
 
         # 3 конфигурации
         configs = [
@@ -102,11 +102,11 @@ def compare_configurations():
                 'precision': precision
             })
 
-            print(f"   ✅ Precision@20: {precision:.4f}\n")
+            print(f"    Precision@20: {precision:.4f}\n")
 
         # Резултати
         print("=" * 80)
-        print("📊 RESULTS SUMMARY")
+        print(" RESULTS SUMMARY")
         print("=" * 80)
         print(f"{'Configuration':<25} {'Alpha':<10} {'Precision@20':<15} {'Improvement':<15}")
         print("-" * 80)
@@ -124,13 +124,13 @@ def compare_configurations():
         # Најди best
         best = max(results, key=lambda x: x['precision'])
 
-        print(f"\n🏆 BEST CONFIGURATION: {best['name']}")
+        print(f"\n BEST CONFIGURATION: {best['name']}")
         print(f"   • Alpha: {best['alpha']}")
         print(f"   • Precision@20: {best['precision']:.4f}")
         print(f"   • Traditional: {int(best['alpha']*100)}%")
         print(f"   • GNN: {int((1-best['alpha'])*100)}%")
 
-        print("\n💡 Препорака:")
+        print("\n Препорака:")
         if best['alpha'] >= 0.8:
             print("   Traditional features се покорисни од GNN за овој dataset.")
             print("   Причини: Tag matching е многу силен, GNN треба подобар training.")

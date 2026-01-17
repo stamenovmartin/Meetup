@@ -138,40 +138,219 @@ class GNNRecommender:
         return tag_score + geo_score
 
     def gnn_similarity_score(self, user_id: int, event: Event) -> float:
-        """GNN-базиран скор врз основа на embeddings similarity"""
+        """
+        БАЗИЧЕН GNN semantic similarity скор (само embeddings)
+        Ова е само еден дел од вкупниот personalized score
+        """
         if self.event_embeddings is None or len(self.event_embeddings) == 0 or event.id not in self.event_id_mapping:
             return 0.0
 
         try:
-            # Земи embedding за овој настан
             event_idx = self.event_id_mapping[event.id]
             event_emb = self.event_embeddings[event_idx]
 
-            # Најди настани што корисникот ги лајкал
             likes = Attendance.query.filter_by(user_id=user_id, rating=1).all()
+            dislikes = Attendance.query.filter_by(user_id=user_id, rating=-1).all()
+
             liked_event_ids = [a.event_id for a in likes]
+            disliked_event_ids = [a.event_id for a in dislikes]
 
-            if not liked_event_ids:
-                return 0.0
-
-            # Пресметај просечна сличност со лајкани настани
-            similarities = []
+            # Positive similarities
+            positive_similarities = []
             for liked_id in liked_event_ids:
                 if liked_id in self.event_id_mapping:
                     liked_idx = self.event_id_mapping[liked_id]
                     liked_emb = self.event_embeddings[liked_idx]
-
-                    # Cosine similarity
                     sim = np.dot(event_emb, liked_emb) / (
                             np.linalg.norm(event_emb) * np.linalg.norm(liked_emb) + 1e-8
                     )
-                    similarities.append(max(0, sim))  # Само позитивни сличности
+                    positive_similarities.append(max(0, sim))
 
-            return np.mean(similarities) if similarities else 0.0
+            # Negative similarities
+            negative_similarities = []
+            for disliked_id in disliked_event_ids:
+                if disliked_id in self.event_id_mapping:
+                    disliked_idx = self.event_id_mapping[disliked_id]
+                    disliked_emb = self.event_embeddings[disliked_idx]
+                    sim = np.dot(event_emb, disliked_emb) / (
+                            np.linalg.norm(event_emb) * np.linalg.norm(disliked_emb) + 1e-8
+                    )
+                    negative_similarities.append(max(0, sim))
+
+            if not positive_similarities:
+                return 0.0
+
+            # TOP-3 average
+            top_k = min(3, len(positive_similarities))
+            top_positive = sorted(positive_similarities, reverse=True)[:top_k]
+            positive_score = np.mean(top_positive)
+
+            # Dislike penalty
+            if negative_similarities:
+                max_negative = max(negative_similarities)
+                penalty = max_negative * 0.5
+            else:
+                penalty = 0.0
+
+            final_score = max(0.0, positive_score - penalty)
+            return final_score
 
         except Exception as e:
             logger.error(f"Грешка во GNN similarity: {e}")
             return 0.0
+
+    def personalized_score(self, user_id: int, event: Event) -> float:
+        """
+        ВИСТИНСКИ ПЕРСОНАЛИЗИРАН СКОР - комбинира многу сигнали
+
+        Враќа скор 0-1 кој одговара на "колку % би му одговарал овој настан"
+        базирано на целиот кориснички профил.
+
+        Компоненти:
+        1. GNN semantic similarity (40%)
+        2. Tag preference matching (30%)
+        3. Venue preference (20%)
+        4. Temporal patterns (10%)
+        + Random noise (5%) за tie-breaking
+        """
+        try:
+            import random
+            random.seed(event.id)  # Deterministic per event
+            # Get user's history
+            likes = Attendance.query.filter_by(user_id=user_id, rating=1).all()
+            dislikes = Attendance.query.filter_by(user_id=user_id, rating=-1).all()
+
+            if not likes:
+                # Нов корисник - fallback на GNN
+                return self.gnn_similarity_score(user_id, event) * 0.5
+
+            # === COMPONENT 1: GNN Semantic Similarity (30%) ===
+            gnn_score = self.gnn_similarity_score(user_id, event)
+
+            # === COMPONENT 2: Tag Preference Matching (25%) ===
+            # Изгради weighted tag preferences
+            liked_events = Event.query.filter(Event.id.in_([a.event_id for a in likes])).all()
+            disliked_events = Event.query.filter(Event.id.in_([a.event_id for a in dislikes])).all()
+
+            liked_tags = {}
+            for e in liked_events:
+                for tag in (e.tags or "").split(","):
+                    tag = tag.strip()
+                    if tag:
+                        liked_tags[tag] = liked_tags.get(tag, 0) + 1
+
+            disliked_tags = {}
+            for e in disliked_events:
+                for tag in (e.tags or "").split(","):
+                    tag = tag.strip()
+                    if tag:
+                        disliked_tags[tag] = disliked_tags.get(tag, 0) + 1
+
+            # Match event tags
+            event_tags = set((event.tags or "").split(","))
+            event_tags = {t.strip() for t in event_tags if t.strip()}
+
+            tag_score = 0.0
+            if event_tags and liked_tags:
+                # Weighted overlap
+                positive_weight = sum(liked_tags.get(t, 0) for t in event_tags)
+                negative_weight = sum(disliked_tags.get(t, 0) for t in event_tags)
+
+                max_weight = max(liked_tags.values()) * len(event_tags)
+                if max_weight > 0:
+                    tag_score = (positive_weight - negative_weight * 2) / max_weight
+                    tag_score = max(0.0, min(1.0, tag_score))
+
+            # === COMPONENT 3: Venue Preference (20%) ===
+            liked_venues = {}
+            for e in liked_events:
+                if e.venue_id:
+                    liked_venues[e.venue_id] = liked_venues.get(e.venue_id, 0) + 1
+
+            disliked_venues = {}
+            for e in disliked_events:
+                if e.venue_id:
+                    disliked_venues[e.venue_id] = disliked_venues.get(e.venue_id, 0) + 1
+
+            venue_score = 0.0
+            if event.venue_id and liked_venues:
+                total_venue_likes = sum(liked_venues.values())
+                venue_likes = liked_venues.get(event.venue_id, 0)
+                venue_dislikes = disliked_venues.get(event.venue_id, 0)
+
+                venue_score = (venue_likes - venue_dislikes * 2) / (total_venue_likes + 1)
+                venue_score = max(0.0, min(1.0, venue_score))
+
+            # === COMPONENT 4: Temporal Patterns (10%) ===
+            from datetime import datetime
+
+            temporal_score = 0.5  # Neutral default
+
+            if event.starts_at:
+                event_dow = event.starts_at.weekday()  # 0=Monday
+                event_hour = event.starts_at.hour
+
+                liked_dow = {}
+                liked_hour = {}
+
+                for e in liked_events:
+                    if e.starts_at:
+                        dow = e.starts_at.weekday()
+                        hour = e.starts_at.hour
+                        liked_dow[dow] = liked_dow.get(dow, 0) + 1
+                        liked_hour[hour] = liked_hour.get(hour, 0) + 1
+
+                if liked_dow:
+                    total_dow = sum(liked_dow.values())
+                    dow_affinity = liked_dow.get(event_dow, 0) / (total_dow + 1)
+
+                    total_hour = sum(liked_hour.values())
+                    hour_affinity = liked_hour.get(event_hour, 0) / (total_hour + 1)
+
+                    temporal_score = (dow_affinity + hour_affinity) / 2
+
+            # === COMPONENT 5: Random Noise (5%) - за tie-breaking ===
+            # Детерминистичен noise based на event ID
+            noise = (random.random() - 0.5) * 0.1  # ±5%
+
+            # === FINAL WEIGHTED COMBINATION ===
+            weights = {
+                'gnn': 0.40,
+                'tags': 0.30,
+                'venue': 0.20,
+                'temporal': 0.10
+            }
+
+            raw_score = (
+                weights['gnn'] * gnn_score +
+                weights['tags'] * tag_score +
+                weights['venue'] * venue_score +
+                weights['temporal'] * temporal_score
+            )
+
+            # Додај noise за tie-breaking
+            raw_score += noise
+
+            # === SCORE SCALING: Балансирана дистрибуција низ 0-1 range ===
+            # Raw scores се обично 0.0-0.35, scaling до 0-1
+            #
+            # Користи power function 0.7 за balanced distribution:
+            # - Не премногу агресивен како sqrt (0.5)
+            # - Не премногу flat како linear (1.0)
+            # - power=0.7 дава најдобра распределба
+
+            if raw_score <= 0:
+                final_score = 0.0
+            else:
+                # Power transformation со factor 2.5
+                final_score = min(1.0, np.power(raw_score * 2.5, 0.7))
+
+            return max(0.0, min(1.0, final_score))
+
+        except Exception as e:
+            logger.error(f"Грешка во personalized_score: {e}")
+            # Fallback to GNN
+            return self.gnn_similarity_score(user_id, event) * 0.5
 
     def combined_score(self, user_id: int, event: Event) -> float:
         """Комбиниран скор: традиционален + GNN - GNN СЕКОГАШ ВЛИЈАЕ!"""
@@ -242,10 +421,38 @@ class GNNRecommender:
         recommendations = []
         total_candidates = len(sorted_events)  # СИТЕ 548 настани
 
+        # Прво, пресметај ги сите PERSONALIZED scores за подобра нормализација
+        all_gnn_scores = []
+        for _, event in sorted_events:
+            # Користи персонализиран score наместо само GNN embeddings
+            pers_s = self.personalized_score(user_id, event)
+            all_gnn_scores.append(pers_s)
+
+        # Пресметај статистика за calibration
+        if all_gnn_scores:
+            mean_gnn = np.mean(all_gnn_scores)
+            std_gnn = np.std(all_gnn_scores)
+            max_gnn = np.max(all_gnn_scores)
+        else:
+            mean_gnn, std_gnn, max_gnn = 0.0, 1.0, 1.0
+
         # ВАЖНО: Пресметај процент врз основа на СИТЕ настани, не само топ limit!
         for rank, (score, event) in enumerate(sorted_events):
             # Користи ранг од СИТЕ настани за вистински процент (0-100%)
             score_pct = percentile_to_score(rank, total_candidates)
+
+            # Пресметај ПЕРСОНАЛИЗИРАН скор (комбинира GNN + tags + category + venue + temporal)
+            pers_score = self.personalized_score(user_id, event)
+            trad_score = self.traditional_score(user_id, event)
+
+            # ДИРЕКТНА КОНВЕРЗИЈА: personalized_score е веќе 0-1, само *100 за процент
+            # Персонализираниот score веќе е калибриран и секој настан има уникатна вредност
+            # затоа што комбинира многу фактори (GNN, tags, category, venue, temporal)
+            #
+            # Не користиме sigmoid нормализација овде - персонализираниот score
+            # веќе одговара на "колку % би му одговарал овој настан"
+            gnn_confidence = pers_score * 100.0
+            gnn_confidence = round(max(0.0, min(100.0, gnn_confidence)), 1)
 
             recommendations.append({
                 "event_id": event.id,
@@ -255,8 +462,9 @@ class GNNRecommender:
                 "venue_id": event.venue_id,
                 "tags": (event.tags or "").split(","),
                 "score_pct": score_pct,
-                "raw_score": round(score, 3),  # За debugging
-                "rank": rank + 1  # Ранг (1 = најдобар)
+                "gnn_score": gnn_confidence,
+                "raw_score": round(score, 3),
+                "rank": rank + 1
             })
 
         # Врати само TOP limit за API response (но процентите се пресметани од сите!)
