@@ -6,6 +6,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
+
+    // ✅ ОВА ГО ДОДАВАШ
+    allowedHosts: true,
+
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:5000',
@@ -16,6 +20,8 @@ export default defineConfig({
   },
   define: {
     // Allow environment variable for backend URL
-    'import.meta.env.VITE_BACKEND_URL': JSON.stringify(process.env.VITE_BACKEND_URL || 'http://127.0.0.1:5000')
+    'import.meta.env.VITE_BACKEND_URL': JSON.stringify(
+      process.env.VITE_BACKEND_URL || 'http://127.0.0.1:5000'
+    )
   }
 })

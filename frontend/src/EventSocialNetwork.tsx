@@ -458,9 +458,12 @@ const SearchComponent: React.FC<{
 const GroupRecommendations: React.FC<{
   friends: Friend[];
   onGetRecommendations: (selectedIds: number[]) => void;
+  onLoadMore: () => void;
   recommendations: Event[];
   venues: VenuesMap;
-}> = ({ friends, onGetRecommendations, recommendations, venues }) => {
+  hasMore: boolean;
+  loadingMore: boolean;
+}> = ({ friends, onGetRecommendations, onLoadMore, recommendations, venues, hasMore, loadingMore }) => {
   const [selectedFriends, setSelectedFriends] = useState<number[]>([]);
 
   const toggleFriend = (id: number) => {
@@ -504,13 +507,43 @@ const GroupRecommendations: React.FC<{
       {recommendations.length > 0 && (
         <div>
           <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-6">
-            Заеднички препораки
+            Заеднички препораки ({recommendations.length})
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {recommendations.map(event => (
               <EventCard key={event.id || event.event_id} event={event} venue={venues[event.venue_id!]} showRecommendation />
             ))}
           </div>
+
+          {/* Копче за вчитување повеќе групни препораки */}
+          {hasMore && (
+            <div className="mt-12 text-center">
+              <button
+                onClick={onLoadMore}
+                disabled={loadingMore}
+                className="px-10 py-5 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-500/30 hover:bg-indigo-700 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-wait flex items-center gap-3 mx-auto"
+              >
+                {loadingMore ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Се вчитува...
+                  </>
+                ) : (
+                  <>
+                    <ArrowRight className="w-5 h-5" />
+                    Прикажи повеќе препораки
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* Порака кога нема повеќе */}
+          {!hasMore && recommendations.length > 0 && (
+            <div className="mt-12 text-center">
+              <p className="text-slate-400 font-bold">Ги видовте сите заеднички препораки!</p>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -625,6 +658,18 @@ const EventSocialNetwork: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
 
+  // Pagination state за препораки
+  const [recsPage, setRecsPage] = useState(0);
+  const [recsHasMore, setRecsHasMore] = useState(true);
+  const [recsLoadingMore, setRecsLoadingMore] = useState(false);
+  const RECS_PER_PAGE = 20;
+
+  // Pagination state за групни препораки
+  const [groupRecsPage, setGroupRecsPage] = useState(0);
+  const [groupRecsHasMore, setGroupRecsHasMore] = useState(true);
+  const [groupRecsLoadingMore, setGroupRecsLoadingMore] = useState(false);
+  const [selectedFriendIds, setSelectedFriendIds] = useState<number[]>([]);
+
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
     setStoredTheme(darkMode);
@@ -646,14 +691,17 @@ const EventSocialNetwork: React.FC = () => {
       const [evs, vens, recs, favs, frnds, feedData] = await Promise.all([
         apiCall('/api/events'),
         apiCall('/api/venues'),
-        apiCall('/api/recommend/me?limit=10000'),
+        apiCall(`/api/recommend/me?limit=${RECS_PER_PAGE}&offset=0`),
         apiCall('/api/user/favorites'),
         apiCall('/api/friends/list'),
         apiCall('/api/feed')
       ]);
       setEvents(Array.isArray(evs) ? evs : []);
       setVenues((vens || []).reduce((acc: any, v: Venue) => ({ ...acc, [v.id]: v }), {}));
-      setRecommendations(Array.isArray(recs) ? recs : []);
+      const recsArray = Array.isArray(recs) ? recs : [];
+      setRecommendations(recsArray);
+      setRecsPage(0);
+      setRecsHasMore(recsArray.length === RECS_PER_PAGE);
       setFavorites(Array.isArray(favs) ? favs : []);
       setFriends(Array.isArray(frnds) ? frnds : []);
       setFeed(Array.isArray(feedData) ? feedData : []);
@@ -710,14 +758,19 @@ const EventSocialNetwork: React.FC = () => {
   const handleGroupRecommendations = async (selectedIds: number[]) => {
     if (selectedIds.length === 0) return;
     setLoading(true);
+    setSelectedFriendIds(selectedIds); // Зачувај ги избраните пријатели за пагинација
     try {
       const data = await apiCall('/api/recommend/group', {
         method: 'POST',
-        body: JSON.stringify({ user_ids: selectedIds })
+        body: JSON.stringify({ user_ids: selectedIds, limit: RECS_PER_PAGE, offset: 0 })
       });
-      setGroupRecs(Array.isArray(data) ? data : []);
+      const groupRecsArray = Array.isArray(data) ? data : [];
+      setGroupRecs(groupRecsArray);
+      setGroupRecsPage(0);
+      setGroupRecsHasMore(groupRecsArray.length === RECS_PER_PAGE);
     } catch {
       setGroupRecs([]);
+      setGroupRecsHasMore(false);
     } finally {
       setLoading(false);
     }
@@ -741,6 +794,53 @@ const EventSocialNetwork: React.FC = () => {
       });
       await handleSearchUsers();
     } catch {}
+  };
+
+  // Функција за вчитување повеќе препораки (пагинација)
+  const loadMoreRecommendations = async () => {
+    if (recsLoadingMore || !recsHasMore) return;
+    setRecsLoadingMore(true);
+    try {
+      const nextPage = recsPage + 1;
+      const offset = nextPage * RECS_PER_PAGE;
+      const moreRecs = await apiCall(`/api/recommend/me?limit=${RECS_PER_PAGE}&offset=${offset}`);
+      const moreRecsArray = Array.isArray(moreRecs) ? moreRecs : [];
+
+      if (moreRecsArray.length > 0) {
+        setRecommendations(prev => [...prev, ...moreRecsArray]);
+        setRecsPage(nextPage);
+      }
+      setRecsHasMore(moreRecsArray.length === RECS_PER_PAGE);
+    } catch (err) {
+      console.error('Error loading more recommendations:', err);
+    } finally {
+      setRecsLoadingMore(false);
+    }
+  };
+
+  // Функција за вчитување повеќе групни препораки (пагинација)
+  const loadMoreGroupRecs = async () => {
+    if (groupRecsLoadingMore || !groupRecsHasMore || selectedFriendIds.length === 0) return;
+    setGroupRecsLoadingMore(true);
+    try {
+      const nextPage = groupRecsPage + 1;
+      const offset = nextPage * RECS_PER_PAGE;
+      const moreRecs = await apiCall('/api/recommend/group', {
+        method: 'POST',
+        body: JSON.stringify({ user_ids: selectedFriendIds, limit: RECS_PER_PAGE, offset })
+      });
+      const moreRecsArray = Array.isArray(moreRecs) ? moreRecs : [];
+
+      if (moreRecsArray.length > 0) {
+        setGroupRecs(prev => [...prev, ...moreRecsArray]);
+        setGroupRecsPage(nextPage);
+      }
+      setGroupRecsHasMore(moreRecsArray.length === RECS_PER_PAGE);
+    } catch (err) {
+      console.error('Error loading more group recommendations:', err);
+    } finally {
+      setGroupRecsLoadingMore(false);
+    }
   };
 
   if (!accessToken) {
@@ -911,7 +1011,7 @@ const EventSocialNetwork: React.FC = () => {
                 <Sparkles className="w-10 h-10 text-indigo-600" />
                 Селектирано само за тебе
               </h2>
-              <p className="text-slate-500 font-bold mt-2 ml-1">Врз база на твоите интереси</p>
+              <p className="text-slate-500 font-bold mt-2 ml-1">Врз база на твоите интереси ({recommendations.length} препораки)</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
               {recommendations.map(event => (
@@ -925,6 +1025,36 @@ const EventSocialNetwork: React.FC = () => {
                 />
               ))}
             </div>
+
+            {/* Копче за вчитување повеќе препораки */}
+            {recsHasMore && (
+              <div className="mt-12 text-center">
+                <button
+                  onClick={loadMoreRecommendations}
+                  disabled={recsLoadingMore}
+                  className="px-10 py-5 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-500/30 hover:bg-indigo-700 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-wait flex items-center gap-3 mx-auto"
+                >
+                  {recsLoadingMore ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Се вчитува...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowRight className="w-5 h-5" />
+                      Прикажи повеќе препораки
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Порака кога нема повеќе */}
+            {!recsHasMore && recommendations.length > 0 && (
+              <div className="mt-12 text-center">
+                <p className="text-slate-400 font-bold">Ги видовте сите препораки!</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -932,8 +1062,11 @@ const EventSocialNetwork: React.FC = () => {
           <GroupRecommendations
             friends={friends}
             onGetRecommendations={handleGroupRecommendations}
+            onLoadMore={loadMoreGroupRecs}
             recommendations={groupRecs}
             venues={venues}
+            hasMore={groupRecsHasMore}
+            loadingMore={groupRecsLoadingMore}
           />
         )}
 
