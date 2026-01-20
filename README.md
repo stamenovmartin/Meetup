@@ -459,10 +459,9 @@ python -c "from models.recommender import get_recommender; r = get_recommender()
 
 ## 👨‍💻 Автор
 
-**Martin Stamenov**
-- Email: martin.stamenov03@gmail.com
-- GitHub: [GitHub Profile]
-- University Project: MSc Computer Science - GNN Recommendation Systems
+**Martin Stamenov & Teodora Saneva**
+- Email: martin.stamenov03@gmail.com & sanevat@t.mk
+- University Project: Computer Science - GNN Recommendation Systems
 
 ---
 
@@ -477,15 +476,9 @@ MIT License - слободно користење и модификација.
 - **PyTorch Geometric** - GNN framework
 - **Flask** - Backend framework
 - **React** - Frontend framework
-- **Claude AI** - Development assistant
 
 ---
 
-**Последно ажурирано:** 2025-09-30
-
-**Верзија:** 2.0.0 (GNN Fully Functional + Analytics)
-
----
 
 ## 💡 Quick Start Cheat Sheet
 
