@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<h4 class="mb-3">Мои препораки</h4>
+<div class="row g-3">
+  {% for score, e in recs %}
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="d-flex justify-content-between">
+          <h5 class="card-title">{{ e.title }}</h5>
+          <span class="badge text-bg-info">score {{ '%.2f' % score }}</span>
+        </div>
+        <div class="small text-muted mb-2">
+          {{ e.starts_at.strftime('%Y-%m-%d %H:%M') }} —
+          {% set v = Venue.query.get(e.venue_id) %}
+          {% if v %}{{ v.name }}{% else %}Unknown venue{% endif %}
+        </div>
+        {% if e.tags %}
+          <div class="mb-2">
+            {% for t in (e.tags or '').split(',') if t %}
+              <span class="badge text-bg-secondary">{{ t }}</span>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<h4 class="mb-3">Admin: Ingest CSV</h4>
+<form method="post" class="card p-3 shadow-sm">
+  <div class="mb-3">
+    <label class="form-label">Windows патека до CSV</label>
+    <input class="form-control" name="path" placeholder="C:\path\to\events_gnn_ready.csv" required>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Limit (опционално)</label>
+    <input class="form-control" name="limit" type="number" min="1" placeholder="500">
+  </div>
+  <button class="btn btn-primary">Ingest</button>
+</form>
+<p class="text-muted mt-3">Само admin (martin.stamenov03@gmail.com). Промени во код ако сакаш друга логика.</p>
+{% endblock %}
